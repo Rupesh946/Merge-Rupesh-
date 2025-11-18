@@ -3,9 +3,8 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { NotificationsModal } from "@/components/notifications-modal";
 import { MessagesModal } from "@/components/messages-modal";
-import { 
+import {
   Bell,
   MessageCircle,
   Settings,
@@ -20,7 +19,6 @@ interface NavbarProps {
 }
 
 export function Navbar({ currentPage }: NavbarProps) {
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
   return (
@@ -68,14 +66,16 @@ export function Navbar({ currentPage }: NavbarProps) {
                   <MessageCircle className="h-4 w-4" />
                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></div>
                 </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="relative"
-                  onClick={() => setShowNotifications(!showNotifications)}
+                  asChild
                 >
-                  <Bell className="h-4 w-4" />
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></div>
+                  <Link href="/notifications">
+                    <Bell className="h-4 w-4" />
+                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></div>
+                  </Link>
                 </Button>
                 <Button variant="ghost" size="sm" asChild>
                   <Link href="/settings">
@@ -105,13 +105,9 @@ export function Navbar({ currentPage }: NavbarProps) {
         </div>
       </div>
       
-      <NotificationsModal 
-        isOpen={showNotifications} 
-        onClose={() => setShowNotifications(false)} 
-      />
-      <MessagesModal 
-        isOpen={showMessages} 
-        onClose={() => setShowMessages(false)} 
+      <MessagesModal
+        isOpen={showMessages}
+        onClose={() => setShowMessages(false)}
       />
     </header>
   );
