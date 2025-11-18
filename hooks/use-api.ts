@@ -52,5 +52,5 @@ export function useApi<T>(
     }
   };
 
-  return { data, loading, error, refetch };
+  return { data, loading, error, refetch, setData };
 }
