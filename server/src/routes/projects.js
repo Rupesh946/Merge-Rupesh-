@@ -4,6 +4,7 @@ const prisma = require('../config/database');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
 const { cacheMiddleware } = require('../middleware/cache');
 const { invalidateCacheByPattern } = require('../utils/redisUtils');
+const { getIO, getUser } = require('../socket');
 
 const router = express.Router();
 
@@ -214,6 +215,9 @@ router.post('/', authenticateToken, [
     // Invalidate project cache after creation
     await invalidateCacheByPattern('cache:/api/projects*');
 
+    const io = getIO();
+    io.emit('new_project', project);
+
     res.status(201).json({ project });
   } catch (error) {
     console.error('Create project error:', error);
@@ -284,54 +288,138 @@ router.post('/:id/like', authenticateToken, async (req, res) => {
     const projectId = req.params.id;
     const userId = req.user.id;
 
-    // Check if project exists
-    const project = await prisma.project.findUnique({
-      where: { id: projectId }
-    });
+    const result = await prisma.$transaction(async (prisma) => {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              image: true
+            }
+          }
+        }
+      });
 
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
+      if (!project) {
+        throw new Error('Project not found');
+      }
 
-    // Check if already liked
-    const existingLike = await prisma.like.findUnique({
-      where: {
-        userId_projectId: {
-          userId,
-          projectId
+      const existingLike = await prisma.like.findUnique({
+        where: {
+          userId_projectId: {
+            userId,
+            projectId
+          }
+        }
+      });
+
+      if (existingLike) {
+        await prisma.like.delete({
+          where: { id: existingLike.id }
+        });
+        return { liked: false, project };
+      } else {
+        try {
+          const like = await prisma.like.create({
+            data: {
+              userId,
+              projectId
+            },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  image: true
+                }
+              }
+            }
+          });
+          return { liked: true, project, user: like.user };
+        } catch (error) {
+          if (error.code === 'P2002') {
+            // Unique constraint violation, another request already created the like.
+            // We can treat this as a success.
+            const user = await prisma.user.findUnique({ where: { id: userId } });
+            return { liked: true, project, user };
+          }
+          throw error;
         }
       }
     });
 
-    if (existingLike) {
-      // Unlike
-      await prisma.like.delete({
-        where: { id: existingLike.id }
-      });
+    await invalidateCacheByPattern('cache:/api/projects*');
+    await invalidateCacheByPattern(`cache:/api/projects/${projectId}*`);
 
-      // Invalidate project cache after unlike
-      await invalidateCacheByPattern('cache:/api/projects*');
-      await invalidateCacheByPattern(`cache:/api/projects/${projectId}*`);
-
-      res.json({ liked: false, message: 'Project unliked' });
-    } else {
-      // Like
-      await prisma.like.create({
-        data: {
-          userId,
-          projectId
-        }
-      });
-
-      // Invalidate project cache after like
-      await invalidateCacheByPattern('cache:/api/projects*');
-      await invalidateCacheByPattern(`cache:/api/projects/${projectId}*`);
-
+    if (result.liked) {
+      const io = getIO();
+      const ownerSocket = getUser(result.project.authorId);
+      if (ownerSocket) {
+        io.to(ownerSocket.socketId).emit('project_liked', { project: result.project, user: result.user });
+      }
       res.json({ liked: true, message: 'Project liked' });
+    } else {
+      res.json({ liked: false, message: 'Project unliked' });
     }
   } catch (error) {
     console.error('Like project error:', error);
+    if (error.message === 'Project not found') {
+      return res.status(404).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Failed to like/unlike project' });
+  }
+});
+
+// Add comment to project
+router.post('/:id/comments', authenticateToken, [
+  body('content').isLength({ min: 1 }).trim(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: errors.array()
+      });
+    }
+
+    const { content } = req.body;
+    const projectId = req.params.id;
+    const userId = req.user.id;
+
+    const comment = await prisma.comment.create({
+      data: {
+        content,
+        authorId: userId,
+        projectId,
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            image: true,
+          },
+        },
+      },
+    });
+
+    // Invalidate project cache after comment
+    await invalidateCacheByPattern('cache:/api/projects*');
+    await invalidateCacheByPattern(`cache:/api/projects/${projectId}*`);
+
+    const io = getIO();
+    io.emit('new_comment', comment);
+
+    res.status(201).json({ comment });
+  } catch (error) {
+    console.error('Add comment error:', error);
+    res.status(500).json({ error: 'Failed to add comment' });
   }
 });
 

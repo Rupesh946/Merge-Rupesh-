@@ -19,7 +19,13 @@ const devToService = require('./services/devto');
 const passport = require('passport');
 const cookieParser = require('cookie-parser');
 
+const http = require('http');
+const { initSocket } = require('./socket');
+
 const app = express();
+const server = http.createServer(app);
+const io = initSocket(server);
+
 const PORT = process.env.PORT || 5000;
 
 // Security middleware
@@ -112,7 +118,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, async () => {
+server.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
