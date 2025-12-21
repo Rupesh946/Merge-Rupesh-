@@ -3,6 +3,10 @@ const { createClient } = require('redis');
 let redisClient;
 
 const connectRedis = async () => {
+  if (redisClient && redisClient.isOpen) {
+    return redisClient;
+  }
+
   try {
     redisClient = createClient({
       url: process.env.REDIS_URL || 'redis://localhost:6379',
@@ -38,7 +42,14 @@ const getRedisClient = () => {
   return redisClient;
 };
 
+const disconnectRedis = async () => {
+  if (redisClient && redisClient.isOpen) {
+    await redisClient.disconnect();
+  }
+};
+
 module.exports = {
   connectRedis,
   getRedisClient,
+  disconnectRedis,
 };

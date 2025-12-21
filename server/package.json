@@ -10,7 +10,10 @@
     "db:generate": "prisma generate --schema=./prisma/schema.prisma",
     "db:push": "prisma db push --schema=./prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema=./prisma/schema.prisma",
-    "db:seed": "node src/seed.js"
+    "db:seed": "node src/seed.js",
+    "test": "jest",
+    "docker:redis:up": "docker-compose -f ../docker-compose.yml up -d redis",
+    "docker:redis:down": "docker-compose -f ../docker-compose.yml down redis"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",
@@ -34,8 +37,11 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.2.0",
     "nodemon": "^3.0.2",
-    "prisma": "^6.16.2"
+    "prisma": "^6.16.2",
+    "supertest": "^7.1.4"
   },
   "keywords": [
     "express",

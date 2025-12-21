@@ -238,13 +238,14 @@ class ApiClient {
   }
 
   // Projects
-  async getProjects(params?: { page?: number; limit?: number; search?: string; tag?: string; featured?: boolean }) {
+  async getProjects(params?: { page?: number; limit?: number; search?: string; tag?: string; featured?: boolean; author?: string }) {
     const searchParams = new URLSearchParams();
     if (params?.page) searchParams.set('page', params.page.toString());
     if (params?.limit) searchParams.set('limit', params.limit.toString());
     if (params?.search) searchParams.set('search', params.search);
     if (params?.tag) searchParams.set('tag', params.tag);
     if (params?.featured) searchParams.set('featured', 'true');
+    if (params?.author) searchParams.set('author', params.author);
 
     const query = searchParams.toString();
     return this.request<{ projects: Project[]; pagination: any }>(`/projects${query ? `?${query}` : ''}`);

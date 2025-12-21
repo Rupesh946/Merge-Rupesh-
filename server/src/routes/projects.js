@@ -11,10 +11,16 @@ const router = express.Router();
 // Get all projects
 router.get('/', optionalAuth, cacheMiddleware(300), async (req, res) => { // Cache for 5 minutes
   try {
-    const { page = 1, limit = 10, search, tag, featured, sort, following } = req.query;
+    const { page = 1, limit = 10, search, tag, featured, sort, following, author } = req.query;
     const skip = (page - 1) * limit;
 
     const where = {};
+
+    if (author) {
+      where.author = {
+        username: author,
+      };
+    }
 
     if (search) {
       where.OR = [

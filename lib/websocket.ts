@@ -5,32 +5,41 @@ import io, { Socket } from 'socket.io-client';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
 
+// Create a singleton socket instance
+const socket: Socket = io(SOCKET_URL, {
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  withCredentials: true,
+  autoConnect: false, // We will connect manually
+});
+
 export const useWebSocket = () => {
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(socket.connected);
 
   useEffect(() => {
-    const socketIo = io(SOCKET_URL, {
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      withCredentials: true,
-    });
+    // Manually connect if not already connected
+    if (!socket.connected) {
+      socket.connect();
+    }
 
-    setSocket(socketIo);
-
-    socketIo.on('connect', () => {
+    const onConnect = () => {
       console.log('WebSocket connected');
       setIsConnected(true);
-    });
+    };
 
-    socketIo.on('disconnect', () => {
+    const onDisconnect = () => {
       console.log('WebSocket disconnected');
       setIsConnected(false);
-    });
+    };
 
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    // Clean up the event listeners on component unmount
     return () => {
-      socketIo.disconnect();
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
     };
   }, []);
 
@@ -38,14 +47,14 @@ export const useWebSocket = () => {
     (event: string, callback: (...args: any[]) => void) => {
       socket?.on(event, callback);
     },
-    [socket]
+    [] // socket is now a stable singleton
   );
 
   const off = useCallback(
     (event: string, callback: (...args: any[]) => void) => {
       socket?.off(event, callback);
     },
-    [socket]
+    [] // socket is now a stable singleton
   );
 
   return { socket, isConnected, on, off };
