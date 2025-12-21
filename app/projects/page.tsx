@@ -51,7 +51,7 @@ export default function ProjectsPage() {
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [repoUrl, setRepoUrl] = useState("");
 
-  const { data: projectsData, loading, error } = useApi(
+  const { data: projectsData, loading, error, setData } = useApi(
     () => api.getProjects({
       limit: itemsPerPage,
       page: currentPage,
@@ -89,9 +89,49 @@ export default function ProjectsPage() {
 
   const handleLikeProject = async (projectId: string) => {
     try {
+      // Optimistic update
+      setData(prevData => {
+        if (!prevData) return prevData;
+        return {
+          ...prevData,
+          projects: prevData.projects.map(p => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                isLiked: !p.isLiked,
+                _count: {
+                  ...p._count,
+                  likes: p.isLiked ? p._count.likes - 1 : p._count.likes + 1,
+                },
+              };
+            }
+            return p;
+          }),
+        };
+      });
       await api.likeProject(projectId);
     } catch (err) {
       console.error("Failed to like project:", err);
+      // Revert on error
+      setData(prevData => {
+        if (!prevData) return prevData;
+        return {
+          ...prevData,
+          projects: prevData.projects.map(p => {
+            if (p.id === projectId) {
+              return {
+                ...p,
+                isLiked: !p.isLiked,
+                _count: {
+                  ...p._count,
+                  likes: p.isLiked ? p._count.likes - 1 : p._count.likes + 1,
+                },
+              };
+            }
+            return p;
+          }),
+        };
+      });
     }
   };
 
@@ -566,19 +606,23 @@ export default function ProjectsPage() {
 
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
-                              <CardTitle className="text-xl font-light mb-3 hover:text-primary cursor-pointer transition-colors flex items-center space-x-2">
-                                <Code2 className="h-5 w-5" />
-                                <span>{project.name}</span>
-                              </CardTitle>
+                              <Link href={`/projects/${project.id}`}>
+                                <CardTitle className="text-xl font-light mb-3 hover:text-primary cursor-pointer transition-colors flex items-center space-x-2">
+                                  <Code2 className="h-5 w-5" />
+                                  <span>{project.name}</span>
+                                </CardTitle>
+                              </Link>
                               <CardDescription className="text-sm font-light text-muted-foreground story-text leading-relaxed">
                                 {project.description}
                               </CardDescription>
                             </div>
                             <div className="flex items-center space-x-2 ml-6">
                               {project.demoUrl && (
-                                <Button variant="outline" size="sm" className="font-light">
-                                  <Play className="mr-2 h-3 w-3" />
-                                  Demo
+                                <Button variant="outline" size="sm" className="font-light" asChild>
+                                  <a href={project.demoUrl} target="_blank" rel="noopener noreferrer">
+                                    <Play className="mr-2 h-3 w-3" />
+                                    Demo
+                                  </a>
                                 </Button>
                               )}
                               {project.githubUrl && (
@@ -603,17 +647,17 @@ export default function ProjectsPage() {
                             </div>
 
                             <div className="flex items-center space-x-4 text-xs text-muted-foreground font-mono">
-                              <div className="flex items-center space-x-1">
-                                <Star className="h-3 w-3" />
-                                <span>{project.stars.toLocaleString()}</span>
-                              </div>
-                              <div className="flex items-center space-x-1">
-                                <GitFork className="h-3 w-3" />
-                                <span>{project.forks}</span>
-                              </div>
-                              <Badge variant="outline" className="font-light border-border/30 text-xs">
-                                {project.language || 'N/A'}
-                              </Badge>
+                                <div className="flex items-center space-x-1">
+                                  <Star className="h-3 w-3" />
+                                  <span>{project.stars.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  <GitFork className="h-3 w-3" />
+                                  <span>{project.forks}</span>
+                                </div>
+                                <Badge variant="outline" className="font-light border-border/30 text-xs">
+                                  {project.language || 'N/A'}
+                                </Badge>
                             </div>
                           </div>
 
@@ -623,17 +667,22 @@ export default function ProjectsPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="font-light"
-                                onClick={() => handleLikeProject(project.id)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleLikeProject(project.id);
+                                }}
                               >
-                                <Heart className="mr-2 h-3 w-3" />
+                                <Heart className={`mr-2 h-3 w-3 ${project.isLiked ? 'fill-current text-red-500' : ''}`} />
                                 {project._count?.likes || 0}
                               </Button>
                               <Button variant="ghost" size="sm" className="font-light">
                                 <MessageCircle className="mr-2 h-3 w-3" />
                                 {project._count?.comments || 0}
                               </Button>
-                              <Button variant="ghost" size="sm" className="font-light">
-                                <ExternalLink className="h-3 w-3" />
+                              <Button variant="ghost" size="sm" className="font-light" asChild>
+                                <Link href={`/projects/${project.id}`}>
+                                  <ExternalLink className="h-3 w-3" />
+                                </Link>
                               </Button>
                             </div>
                           </div>
