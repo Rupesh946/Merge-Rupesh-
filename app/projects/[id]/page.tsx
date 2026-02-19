@@ -2,67 +2,30 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/auth-context';
+import { api, Project, Comment } from '@/lib/api';
 import { useWebSocket } from '@/lib/websocket';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Heart, 
-  MessageCircle, 
-  ExternalLink, 
-  Github, 
+import {
+  Heart,
+  MessageCircle,
+  ExternalLink,
+  Github,
   Star,
   MessageSquare,
   Send
 } from 'lucide-react';
 
-interface Project {
-  id: string;
-  name: string;
-  description: string;
-  githubUrl?: string;
-  demoUrl?: string;
-  language?: string;
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
-  author: {
-    id: string;
-    name: string;
-    username: string;
-    image?: string;
-  };
-  _count: {
-    likes: number;
-    comments: number;
-  };
-  isLiked?: boolean;
-  comments: Comment[];
-}
-
-interface Comment {
-  id: string;
-  content: string;
-  createdAt: string;
-  projectId: string;
-  author: {
-    id: string;
-    name: string;
-    username: string;
-    image?: string;
-  };
-}
-
 const ProjectDetailPage = () => {
   const pathname = usePathname();
   const router = useRouter();
   const projectId = pathname.split('/').pop();
-  const { data: session } = useSession();
-  const userId = session?.user?.id;
-  
+  const { user } = useAuth();
+  const userId = user?.id;
+
   const { isConnected, on, off } = useWebSocket();
 
   const [project, setProject] = useState<Project | null>(null);
@@ -71,14 +34,14 @@ const ProjectDetailPage = () => {
   const [commentContent, setCommentContent] = useState('');
   const [isLiking, setIsLiking] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
-  
+
   const commentInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch project data
   useEffect(() => {
     const fetchProject = async () => {
       if (!projectId) return;
-      
+
       try {
         setLoading(true);
         const data = await api.getProject(projectId);
@@ -142,7 +105,7 @@ const ProjectDetailPage = () => {
   // Handle comment submission
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!commentContent.trim() || !project || !userId) return;
 
     try {
@@ -154,9 +117,9 @@ const ProjectDetailPage = () => {
         projectId: project.id,
         author: {
           id: userId,
-          name: session?.user?.name || '',
-          username: session?.user?.name || '',
-          image: session?.user?.image
+          name: user?.name || '',
+          username: user?.username || '',
+          image: user?.image
         }
       };
 
@@ -165,7 +128,7 @@ const ProjectDetailPage = () => {
 
       // Add comment via API
       await api.addProjectComment(project.id, commentContent);
-      
+
       // Focus back on input
       if (commentInputRef.current) {
         commentInputRef.current.focus();
@@ -232,17 +195,17 @@ const ProjectDetailPage = () => {
         <div className="mb-8">
           <h1 className="text-4xl font-light mb-2">{project.name}</h1>
           <p className="text-lg text-muted-foreground mb-4">{project.description}</p>
-          
+
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
             <span>by {project.author.name}</span>
             {project.language && <span>• {project.language}</span>}
             <span>• {new Date(project.createdAt).toLocaleDateString()}</span>
           </div>
-          
+
           <div className="flex flex-wrap gap-2 mb-6">
             {project.tags.map(tag => (
-              <span 
-                key={tag} 
+              <span
+                key={tag}
                 className="px-3 py-1 bg-primary/10 text-primary/80 rounded-full text-sm"
               >
                 {tag}
@@ -265,12 +228,12 @@ const ProjectDetailPage = () => {
             />
             {project._count.likes} {project._count.likes === 1 ? 'Like' : 'Likes'}
           </Button>
-          
+
           <Button variant="outline" size="sm" className="font-light">
             <MessageCircle className="mr-2 h-4 w-4" />
             {comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}
           </Button>
-          
+
           {project.githubUrl && (
             <Button variant="outline" size="sm" className="font-light" asChild>
               <a href={project.githubUrl} target="_blank" rel="noopener noreferrer">
@@ -279,7 +242,7 @@ const ProjectDetailPage = () => {
               </a>
             </Button>
           )}
-          
+
           {project.demoUrl && (
             <Button variant="outline" size="sm" className="font-light" asChild>
               <a href={project.demoUrl} target="_blank" rel="noopener noreferrer">
@@ -350,11 +313,10 @@ const ProjectDetailPage = () => {
 
         {/* Connection Status */}
         <div className="fixed bottom-4 right-4">
-          <div className={`px-3 py-2 rounded-full text-xs font-medium ${
-            isConnected 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-yellow-100 text-yellow-800'
-          }`}>
+          <div className={`px-3 py-2 rounded-full text-xs font-medium ${isConnected
+            ? 'bg-green-100 text-green-800'
+            : 'bg-yellow-100 text-yellow-800'
+            }`}>
             {isConnected ? '⚡ Connected' : '⚠️ Disconnected'}
           </div>
         </div>

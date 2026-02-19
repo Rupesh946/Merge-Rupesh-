@@ -15,6 +15,19 @@ export interface User {
   createdAt: string;
 }
 
+export interface Comment {
+  id: string;
+  content: string;
+  createdAt: string;
+  projectId: string;
+  author: {
+    id: string;
+    name: string;
+    username: string;
+    image?: string;
+  };
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -34,6 +47,7 @@ export interface Project {
     comments: number;
   };
   isLiked?: boolean;
+  comments?: Comment[];
 }
 
 export interface BlogPost {
@@ -104,7 +118,8 @@ class ApiClient {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       author: this.mockUsers[0],
-      _count: { likes: 50, comments: 12 }
+      _count: { likes: 50, comments: 12 },
+      comments: []
     }
   ];
 
@@ -233,6 +248,16 @@ class ApiClient {
 
   async likeProject(id: string) {
     return { liked: true, message: 'Liked' };
+  }
+
+  async addProjectComment(projectId: string, content: string) {
+    return {
+      id: `comment-${Date.now()}`,
+      content,
+      createdAt: new Date().toISOString(),
+      projectId,
+      author: this.mockUsers[0]
+    };
   }
 
   // Blog Posts - MOCKED
