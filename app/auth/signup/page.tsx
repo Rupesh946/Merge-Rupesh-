@@ -1,18 +1,11 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Github, Minus } from "lucide-react";
+import { Minus } from "lucide-react";
 import Link from "next/link";
-import { useAuth } from "@/contexts/auth-context";
+import { SignUpForm } from "@/components/auth/signup-form";
 
 export default function SignUpPage() {
-  const { githubAuth } = useAuth();
-
-  const handleGitHubAuth = () => {
-    githubAuth();
-  };
-
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-8">
       <div className="w-full max-w-sm">
@@ -30,22 +23,11 @@ export default function SignUpPage() {
           <CardHeader className="text-center pb-4">
             <CardTitle className="text-xl font-light">Sign up</CardTitle>
             <CardDescription className="font-light text-sm">
-              Connect with GitHub to continue
+              Create an account to join the community
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button
-              className="w-full font-light bg-primary text-primary-foreground hover:bg-primary/90"
-              size="lg"
-              onClick={handleGitHubAuth}
-            >
-              <Github className="mr-2 h-4 w-4" />
-              Continue with GitHub
-            </Button>
-            
-            <div className="text-center text-sm font-light text-muted-foreground/80">
-              By signing up, you agree to our Terms and Privacy Policy
-            </div>
+            <SignUpForm />
 
             <div className="text-center">
               <p className="text-sm font-light text-muted-foreground">
