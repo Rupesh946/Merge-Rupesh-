@@ -240,8 +240,8 @@ export default function FaultyTerminal({
   dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 2,
   pageLoadAnimation = true,
   brightness = 1,
-  className,
-  style,
+  className = '',
+  style = {},
   ...rest
 }) {
   const containerRef = useRef(null);
