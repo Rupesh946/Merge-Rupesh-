@@ -64,6 +64,7 @@ export interface BlogPost {
   _count: {
     likes: number;
     comments: number;
+    views?: number;
   };
   isLiked?: boolean;
 }
@@ -262,7 +263,7 @@ class ApiClient {
 
   // Blog Posts - MOCKED
   async getBlogPosts(params?: any) {
-    return { posts: [], pagination: { page: 1, limit: 10, total: 0 } };
+    return { posts: [] as BlogPost[], pagination: { page: 1, limit: 10, total: 0 } };
   }
 
   async getBlogPost(id: string) {

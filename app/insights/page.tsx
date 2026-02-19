@@ -41,7 +41,7 @@ const mockFeaturedAuthors = [
     username: "maya_writes",
     bio: "Senior Engineer at Vercel, writing about web performance",
     followers: 3421,
-    avatar: "/api/placeholder/40/40",
+    image: "/api/placeholder/40/40",
     verified: true
   },
   {
@@ -49,7 +49,7 @@ const mockFeaturedAuthors = [
     username: "systems_thinker",
     bio: "Design systems architect, previously at Figma",
     followers: 2876,
-    avatar: "/api/placeholder/40/40",
+    image: "/api/placeholder/40/40",
     verified: true
   },
   {
@@ -57,7 +57,7 @@ const mockFeaturedAuthors = [
     username: "rust_evangelist",
     bio: "Core contributor to Rust, systems programming enthusiast",
     followers: 4123,
-    avatar: "/api/placeholder/40/40",
+    image: "/api/placeholder/40/40",
     verified: true
   }
 ];
@@ -65,11 +65,11 @@ const mockFeaturedAuthors = [
 export default function InsightsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [contentType, setContentType] = useState<'all' | 'articles' | 'tutorials' | 'news' | 'discussions'>('all');
-  
+
   const { data: insightsData, loading, error } = useApi(
-    () => api.getBlogPosts({ 
-      limit: 10, 
-      search: searchQuery, 
+    () => api.getBlogPosts({
+      limit: 10,
+      search: searchQuery,
       type: contentType === 'all' ? undefined : contentType,
       sort: 'trending'
     }),
@@ -141,36 +141,36 @@ export default function InsightsPage() {
 
                 {/* Content Type Tabs */}
                 <div className="flex flex-wrap items-center gap-4 mb-8">
-                  <Button 
-                    variant={contentType === 'all' ? 'secondary' : 'ghost'} 
+                  <Button
+                    variant={contentType === 'all' ? 'secondary' : 'ghost'}
                     className={`font-light ${contentType === 'all' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                     onClick={() => handleContentTypeChange('all')}
                   >
                     All
                   </Button>
-                  <Button 
-                    variant={contentType === 'articles' ? 'secondary' : 'ghost'} 
+                  <Button
+                    variant={contentType === 'articles' ? 'secondary' : 'ghost'}
                     className={`font-light ${contentType === 'articles' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                     onClick={() => handleContentTypeChange('articles')}
                   >
                     Articles
                   </Button>
-                  <Button 
-                    variant={contentType === 'tutorials' ? 'secondary' : 'ghost'} 
+                  <Button
+                    variant={contentType === 'tutorials' ? 'secondary' : 'ghost'}
                     className={`font-light ${contentType === 'tutorials' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                     onClick={() => handleContentTypeChange('tutorials')}
                   >
                     Tutorials
                   </Button>
-                  <Button 
-                    variant={contentType === 'news' ? 'secondary' : 'ghost'} 
+                  <Button
+                    variant={contentType === 'news' ? 'secondary' : 'ghost'}
                     className={`font-light ${contentType === 'news' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                     onClick={() => handleContentTypeChange('news')}
                   >
                     News
                   </Button>
-                  <Button 
-                    variant={contentType === 'discussions' ? 'secondary' : 'ghost'} 
+                  <Button
+                    variant={contentType === 'discussions' ? 'secondary' : 'ghost'}
                     className={`font-light ${contentType === 'discussions' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                     onClick={() => handleContentTypeChange('discussions')}
                   >
@@ -250,9 +250,9 @@ export default function InsightsPage() {
                               </Badge>
                             )}
                             <span className="text-xs text-muted-foreground font-mono">
-                              {new Date(insight.createdAt).toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric' 
+                              {new Date(insight.createdAt).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric'
                               })}
                             </span>
                           </div>
@@ -386,11 +386,10 @@ export default function InsightsPage() {
                             </p>
                           </div>
                         </div>
-                        <div className={`text-xs px-2 py-1 rounded ${
-                          topic.trend === 'up' ? 'text-green-500 bg-green-500/10' :
+                        <div className={`text-xs px-2 py-1 rounded ${topic.trend === 'up' ? 'text-green-500 bg-green-500/10' :
                           topic.trend === 'down' ? 'text-red-500 bg-red-500/10' :
-                          'text-muted-foreground bg-muted/20'
-                        }`}>
+                            'text-muted-foreground bg-muted/20'
+                          }`}>
                           {topic.trend === 'up' ? '↗' : topic.trend === 'down' ? '↘' : '→'}
                         </div>
                       </div>
@@ -440,7 +439,7 @@ export default function InsightsPage() {
                     {mockFeaturedAuthors.map((author) => (
                       <div key={author.username} className="flex items-start space-x-3">
                         <Avatar className="h-10 w-10">
-                          <AvatarImage src={author.avatar} />
+                          <AvatarImage src={author.image} />
                           <AvatarFallback className="text-xs">{author.name[0]}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
