@@ -82,6 +82,17 @@ export interface FeedItem {
   [key: string]: any;
 }
 
+export interface Notification {
+  id: string;
+  type?: string;
+  title?: string;
+  message?: string;
+  target?: string;
+  createdAt?: string;
+  timeAgo?: string;
+  read?: boolean;
+}
+
 export interface ApiResponse<T> {
   data?: T;
   error?: string;
@@ -315,7 +326,7 @@ class ApiClient {
 
   // Notifications - MOCKED
   async getNotifications(params?: any) {
-    return { notifications: [], unreadCount: 0, pagination: { page: 1, limit: 10, total: 0 } };
+    return { notifications: [] as Notification[], unreadCount: 0, pagination: { page: 1, limit: 10, total: 0 } };
   }
 
   async markNotificationRead(id: string) { return {}; }
