@@ -174,7 +174,15 @@ export default function ProfilePage() {
         try {
           setGithubStatsLoading(true);
           const stats = await api.getGitHubStats(user.githubUsername!);
-          setGithubStats(stats);
+          setGithubStats({
+            publicRepos: stats.publicRepos,
+            publicGists: 0, // Default value
+            followers: stats.followers,
+            following: stats.following,
+            contributions: stats.contributions,
+            stars: stats.stars,
+            totalForks: stats.totalForks,
+          });
         } catch (error) {
           console.error("Error fetching GitHub stats:", error);
           setGithubStats({
@@ -235,9 +243,9 @@ export default function ProfilePage() {
 
   const joinedDate = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-      })
+      year: "numeric",
+      month: "long",
+    })
     : "Unknown";
 
   // Calculate total stats
