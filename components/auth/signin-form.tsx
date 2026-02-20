@@ -23,7 +23,7 @@ export function SignInForm() {
 
         try {
             await login(email, password);
-            router.push('/');
+            router.push('/home');
         } catch (err: any) {
             setError(err.message || 'Failed to sign in');
         } finally {

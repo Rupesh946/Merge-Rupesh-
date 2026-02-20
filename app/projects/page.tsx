@@ -61,8 +61,9 @@ export default function ProjectsPage() {
   );
 
   const projects = projectsData?.projects || [];
-  const totalProjects = projectsData?.pagination?.total || 0;
-  const totalPages = Math.ceil(totalProjects / itemsPerPage) || 1;
+  // Derive hasMore from whether we got a full page of results
+  const hasMoreProjects = projects.length === itemsPerPage;
+  const totalPages = hasMoreProjects ? currentPage + 1 : currentPage;
 
   // GitHub projects hook
   const {
@@ -89,48 +90,38 @@ export default function ProjectsPage() {
   };
 
   const handleLikeProject = async (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    const wasLiked = !!project.isLiked;
+
+    // Optimistic update
+    setData(prevData => {
+      if (!prevData) return prevData;
+      return {
+        ...prevData,
+        projects: prevData.projects.map(p =>
+          p.id === projectId
+            ? { ...p, isLiked: !wasLiked, _count: { ...p._count, likes: wasLiked ? p._count.likes - 1 : p._count.likes + 1 } }
+            : p
+        ),
+      };
+    });
+
     try {
-      // Optimistic update
-      setData(prevData => {
-        if (!prevData) return prevData;
-        return {
-          ...prevData,
-          projects: prevData.projects.map(p => {
-            if (p.id === projectId) {
-              return {
-                ...p,
-                isLiked: !p.isLiked,
-                _count: {
-                  ...p._count,
-                  likes: p.isLiked ? p._count.likes - 1 : p._count.likes + 1,
-                },
-              };
-            }
-            return p;
-          }),
-        };
-      });
-      await api.likeProject(projectId);
+      if (wasLiked) await api.unlikeProject(projectId);
+      else await api.likeProject(projectId);
     } catch (err) {
       console.error("Failed to like project:", err);
-      // Revert on error
+      // Revert
       setData(prevData => {
         if (!prevData) return prevData;
         return {
           ...prevData,
-          projects: prevData.projects.map(p => {
-            if (p.id === projectId) {
-              return {
-                ...p,
-                isLiked: !p.isLiked,
-                _count: {
-                  ...p._count,
-                  likes: p.isLiked ? p._count.likes - 1 : p._count.likes + 1,
-                },
-              };
-            }
-            return p;
-          }),
+          projects: prevData.projects.map(p =>
+            p.id === projectId
+              ? { ...p, isLiked: wasLiked, _count: { ...p._count, likes: wasLiked ? p._count.likes + 1 : p._count.likes - 1 } }
+              : p
+          ),
         };
       });
     }
@@ -741,9 +732,9 @@ export default function ProjectsPage() {
                     </div>
                   </div>
                 )
-              ) : totalPages > 1 && (
+              ) : (currentPage > 1 || hasMoreProjects) && (
                 <div className="flex justify-center mt-12">
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-4">
                     <Button
                       variant="outline"
                       size="sm"
@@ -753,45 +744,12 @@ export default function ProjectsPage() {
                     >
                       Previous
                     </Button>
-
-                    <div className="flex items-center space-x-1">
-                      {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                        if (totalPages <= 5) return i + 1;
-
-                        if (currentPage <= 3) {
-                          if (i < 4) return i + 1;
-                          if (i === 4) return totalPages;
-                        } else if (currentPage >= totalPages - 2) {
-                          if (i === 0) return 1;
-                          if (i >= 1) return totalPages - 4 + i;
-                        } else {
-                          if (i === 0) return 1;
-                          if (i === 1) return currentPage - 1;
-                          if (i === 2) return currentPage;
-                          if (i === 3) return currentPage + 1;
-                          if (i === 4) return totalPages;
-                        }
-                      }).filter(page => page !== undefined).map(page => (
-                        <Button
-                          key={page}
-                          variant={currentPage === page ? 'secondary' : 'outline'}
-                          size="sm"
-                          onClick={() => setCurrentPage(page)}
-                          className={`w-8 h-8 p-0 font-light ${currentPage === page
-                            ? 'text-foreground bg-accent border-accent'
-                            : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                        >
-                          {page}
-                        </Button>
-                      ))}
-                    </div>
-
+                    <span className="text-sm text-muted-foreground font-light">Page {currentPage}</span>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(prev => prev + 1)}
+                      disabled={!hasMoreProjects}
                       className="font-light"
                     >
                       Next

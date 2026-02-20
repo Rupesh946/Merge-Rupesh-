@@ -25,7 +25,7 @@ export function SignUpForm() {
 
         try {
             await register({ name, username, email, password });
-            router.push('/');
+            router.push('/home');
         } catch (err: any) {
             setError(err.message || 'Failed to sign up');
         } finally {

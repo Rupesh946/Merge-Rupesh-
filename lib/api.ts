@@ -1,31 +1,43 @@
-// API client for backend integration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
-// Types
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 export interface User {
   id: string;
   name: string;
   username: string;
-  email?: string; // Made optional
+  email?: string;
   image?: string;
   bio?: string;
   location?: string;
   website?: string;
   githubUsername?: string;
+  techStack?: string[];
   createdAt: string;
+  _count?: { followers: number; following: number; posts: number; projects: number };
+  isFollowing?: boolean;
 }
 
 export interface Comment {
   id: string;
   content: string;
   createdAt: string;
-  projectId: string;
-  author: {
-    id: string;
-    name: string;
-    username: string;
-    image?: string;
-  };
+  author: { id: string; name: string; username: string; image?: string };
+}
+
+export interface Post {
+  id: string;
+  content: string;
+  codeSnippet?: string;
+  codeLanguage?: string;
+  imageUrl?: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  author: User;
+  _count: { likes: number; comments: number };
+  isLiked?: boolean;
+  comments?: Comment[];
 }
 
 export interface Project {
@@ -39,355 +51,312 @@ export interface Project {
   forks: number;
   tags: string[];
   featured: boolean;
+  imageUrl?: string;
   createdAt: string;
   updatedAt: string;
   author: User;
-  _count: {
-    likes: number;
-    comments: number;
-  };
+  _count: { likes: number; comments: number };
   isLiked?: boolean;
   comments?: Comment[];
 }
 
-export interface BlogPost {
-  id: string;
-  title: string;
-  content: string;
-  excerpt?: string;
-  published: boolean;
-  tags: string[];
-  readTime?: number;
-  createdAt: string;
-  updatedAt: string;
-  author: User;
-  _count: {
-    likes: number;
-    comments: number;
-    views?: number;
-  };
-  isLiked?: boolean;
-}
-
-export interface FeedItem {
-  id: string;
-  type: 'project' | 'blog' | 'news';
-  title: string;
-  description: string;
-  author: User;
-  stats: any;
-  tags: string[];
-  timeAgo: string;
-  featured: boolean;
-  [key: string]: any;
-}
-
 export interface Notification {
   id: string;
-  type?: string;
+  type: string;
   title?: string;
-  message?: string;
-  target?: string;
-  createdAt?: string;
-  timeAgo?: string;
-  read?: boolean;
+  message: string;
+  targetId?: string;
+  read: boolean;
+  createdAt: string;
 }
 
-export interface ApiResponse<T> {
+export interface Message {
+  id: string;
+  content: string;
+  codeSnippet?: string;
+  codeLanguage?: string;
+  createdAt: string;
+  sender: { id: string; name: string; username: string; image?: string };
+}
+
+export interface Conversation {
+  id: string;
+  updatedAt: string;
+  participants: { user: User }[];
+  messages: Message[];
+}
+
+export interface ApiResponse<T = any> {
   data?: T;
   error?: string;
   message?: string;
 }
 
-// API Client class
+// ─── API Client ───────────────────────────────────────────────────────────────
+
 class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
-  // Mock data store
-  private mockUsers: User[] = [
-    {
-      id: 'user-1',
-      name: 'Demo User',
-      username: 'demo',
-      email: 'demo@example.com',
-      image: '/api/placeholder/40/40',
-      bio: 'Just a demo user',
-      location: 'Earth',
-      website: 'https://example.com',
-      createdAt: new Date().toISOString()
-    }
-  ];
-
-  private mockProjects: Project[] = [
-    {
-      id: 'proj-1',
-      name: 'Merge Platform',
-      description: 'A social platform for developers.',
-      stars: 120,
-      forks: 45,
-      tags: ['react', 'nextjs', 'typescript'],
-      featured: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      author: this.mockUsers[0],
-      _count: { likes: 50, comments: 12 },
-      comments: []
-    }
-  ];
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
+    if (typeof window !== 'undefined') {
+      this.token = localStorage.getItem('auth_token');
+    }
+  }
+
+  private getHeaders(): HeadersInit {
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    return headers;
+  }
+
+  private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      ...options,
+      headers: { ...this.getHeaders(), ...(options.headers || {}) },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Request failed');
+    return data;
   }
 
   setToken(token: string) {
     this.token = token;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('auth_token', token);
-    }
+    if (typeof window !== 'undefined') localStorage.setItem('auth_token', token);
   }
 
   clearToken() {
     this.token = null;
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
-    }
+    if (typeof window !== 'undefined') localStorage.removeItem('auth_token');
   }
 
-  // Authentication - REAL
+  // ─── Auth ───────────────────────────────────────────────────────────────────
+
   async login(email: string, password: string) {
-    const res = await fetch(`${this.baseUrl}/auth/login`, {
+    const data = await this.request<{ user: User; token: string }>('/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password }),
     });
-
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.message || 'Login failed');
-    }
-
-    const data = await res.json();
     this.setToken(data.token);
     return data;
   }
 
-  async register(userData: any) {
-    const res = await fetch(`${this.baseUrl}/auth/register`, {
+  async register(userData: { email: string; password: string; username: string; name: string }) {
+    const data = await this.request<{ user: User; token: string }>('/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData)
+      body: JSON.stringify(userData),
     });
-
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.message || 'Registration failed');
-    }
-
-    const data = await res.json();
     this.setToken(data.token);
     return data;
   }
 
-  async githubAuth() {
-    // Deprecated or removed
-    console.warn('GitHub auth is disabled');
+  githubAuth() {
+    window.location.href = `${this.baseUrl}/auth/github`;
   }
 
   async githubCallback(token: string, user: User) {
-    // Deprecated
+    this.setToken(token);
   }
 
   async getCurrentUser() {
-    const token = this.token;
-    if (!token) throw new Error('No token found');
-
-    const res = await fetch(`${this.baseUrl}/auth/me`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!res.ok) {
-      this.clearToken();
-      throw new Error('Session expired');
-    }
-
-    return await res.json();
+    return this.request<{ user: User }>('/auth/me');
   }
 
-  async logout() {
+  logout() {
     this.clearToken();
-    // Optional: Call server to invalidate token if using blacklist
   }
 
-  // Feed - MOCKED (Keep existing mocks for Feed, Projects etc for now)
-  async getFeed(params?: any) {
-    return {
-      items: [
-        {
-          id: 'feed-1',
-          type: 'project',
-          title: 'Merge Platform',
-          description: 'A social platform for developers.',
-          author: this.mockUsers[0],
-          stats: { stars: 120, forks: 45, likes: 50, comments: 12 },
-          tags: ['react', 'nextjs'],
-          timeAgo: '2 hours ago',
-          featured: true
-        }
-      ] as FeedItem[],
-      pagination: { page: 1, limit: 10, hasMore: false, total: 1 }
-    };
+  // ─── Feed ───────────────────────────────────────────────────────────────────
+
+  async getFeed(params?: { page?: number; limit?: number }) {
+    const q = new URLSearchParams(params as any).toString();
+    return this.request<{ posts: Post[]; page: number }>(`/feed${q ? '?' + q : ''}`);
   }
+
+  // ─── Explore ────────────────────────────────────────────────────────────────
+
+  async getExplore(params?: { type?: string; page?: number; limit?: number }) {
+    const q = new URLSearchParams(params as any).toString();
+    return this.request<{ posts?: Post[]; projects?: Project[]; page: number }>(`/explore${q ? '?' + q : ''}`);
+  }
+
+  // ─── Tags ───────────────────────────────────────────────────────────────────
 
   async getTrendingTags() {
-    return { tags: [{ name: 'react', count: 10 }, { name: 'javascript', count: 8 }] };
+    return this.request<{ tags: { name: string; count: number }[] }>('/tags');
   }
 
-  // Projects - MOCKED
-  async getProjects(params?: any) {
-    return { projects: this.mockProjects, pagination: { page: 1, limit: 10, total: 1 } };
+  // ─── Posts ──────────────────────────────────────────────────────────────────
+
+  async getPosts(params?: { page?: number; limit?: number; tag?: string; authorId?: string }) {
+    const q = new URLSearchParams(params as any).toString();
+    return this.request<{ posts: Post[]; page: number }>(`/posts${q ? '?' + q : ''}`);
+  }
+
+  async getPost(id: string) {
+    return this.request<{ post: Post }>(`/posts/${id}`);
+  }
+
+  async createPost(postData: { content: string; codeSnippet?: string; codeLanguage?: string; imageUrl?: string; tags?: string[] }) {
+    return this.request<{ post: Post }>('/posts', { method: 'POST', body: JSON.stringify(postData) });
+  }
+
+  async updatePost(id: string, postData: Partial<Post>) {
+    return this.request<{ post: Post }>(`/posts/${id}`, { method: 'PATCH', body: JSON.stringify(postData) });
+  }
+
+  async deletePost(id: string) {
+    return this.request<{ message: string }>(`/posts/${id}`, { method: 'DELETE' });
+  }
+
+  async likePost(id: string) {
+    return this.request<{ liked: boolean; count: number }>(`/posts/${id}/like`, { method: 'POST' });
+  }
+
+  async unlikePost(id: string) {
+    return this.request<{ liked: boolean; count: number }>(`/posts/${id}/like`, { method: 'DELETE' });
+  }
+
+  async getPostComments(postId: string, params?: { page?: number; limit?: number }) {
+    const q = new URLSearchParams(params as any).toString();
+    return this.request<{ comments: Comment[]; page: number }>(`/posts/${postId}/comments${q ? '?' + q : ''}`);
+  }
+
+  async addPostComment(postId: string, content: string) {
+    return this.request<{ comment: Comment }>(`/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify({ content }) });
+  }
+
+  // ─── Projects ───────────────────────────────────────────────────────────────
+
+  async getProjects(params?: { page?: number; limit?: number; search?: string; language?: string; tag?: string; featured?: boolean }) {
+    const q = new URLSearchParams(params as any).toString();
+    return this.request<{ projects: Project[]; page: number }>(`/projects${q ? '?' + q : ''}`);
   }
 
   async getProject(id: string) {
-    return this.mockProjects[0];
+    return this.request<{ project: Project }>(`/projects/${id}`);
   }
 
   async createProject(projectData: Partial<Project>) {
-    console.log('Mock create project:', projectData);
-    return { project: { ...this.mockProjects[0], ...projectData, id: `proj-${Date.now()}` } as Project };
+    return this.request<{ project: Project }>('/projects', { method: 'POST', body: JSON.stringify(projectData) });
+  }
+
+  async updateProject(id: string, projectData: Partial<Project>) {
+    return this.request<{ project: Project }>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(projectData) });
+  }
+
+  async deleteProject(id: string) {
+    return this.request<{ message: string }>(`/projects/${id}`, { method: 'DELETE' });
   }
 
   async likeProject(id: string) {
-    return { liked: true, message: 'Liked' };
+    return this.request<{ liked: boolean; count: number }>(`/projects/${id}/like`, { method: 'POST' });
+  }
+
+  async unlikeProject(id: string) {
+    return this.request<{ liked: boolean; count: number }>(`/projects/${id}/like`, { method: 'DELETE' });
+  }
+
+  async getProjectComments(projectId: string, params?: { page?: number }) {
+    const q = new URLSearchParams(params as any).toString();
+    return this.request<{ comments: Comment[] }>(`/projects/${projectId}/comments${q ? '?' + q : ''}`);
   }
 
   async addProjectComment(projectId: string, content: string) {
-    return {
-      id: `comment-${Date.now()}`,
-      content,
-      createdAt: new Date().toISOString(),
-      projectId,
-      author: this.mockUsers[0]
-    };
+    return this.request<{ comment: Comment }>(`/projects/${projectId}/comments`, { method: 'POST', body: JSON.stringify({ content }) });
   }
 
-  // Blog Posts - MOCKED
-  async getBlogPosts(params?: any) {
-    return { posts: [] as BlogPost[], pagination: { page: 1, limit: 10, total: 0 } };
+  // ─── Users ──────────────────────────────────────────────────────────────────
+
+  async searchUsers(search: string, limit = 20) {
+    return this.request<{ users: User[] }>(`/users?search=${encodeURIComponent(search)}&limit=${limit}`);
   }
 
-  async getBlogPost(id: string) {
-    return {
-      id: 'blog-1',
-      title: 'Sample Blog',
-      content: 'This is a sample blog post.',
-      published: true,
-      tags: ['tech'],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      author: this.mockUsers[0],
-      _count: { likes: 0, comments: 0 }
-    } as BlogPost;
-  }
-
-  async createBlogPost(postData: any) {
-    return { post: { ...postData, id: `blog-${Date.now()}`, author: this.mockUsers[0] } };
-  }
-
-  async likeBlogPost(id: string) {
-    return { liked: true, message: 'Liked' };
-  }
-
-  // Users - MOCKED
   async getUser(username: string) {
-    return this.mockUsers[0];
+    return this.request<{ user: User }>(`/users/${username}`);
   }
 
   async followUser(username: string) {
-    return { following: true, message: 'Followed' };
+    return this.request<{ message: string }>(`/users/${username}/follow`, { method: 'POST' });
+  }
+
+  async unfollowUser(username: string) {
+    return this.request<{ message: string }>(`/users/${username}/follow`, { method: 'DELETE' });
+  }
+
+  async getUserFollowers(username: string, page = 1) {
+    return this.request<{ followers: User[] }>(`/users/${username}/followers?page=${page}`);
+  }
+
+  async getUserFollowing(username: string, page = 1) {
+    return this.request<{ following: User[] }>(`/users/${username}/following?page=${page}`);
+  }
+
+  // ─── Profile ────────────────────────────────────────────────────────────────
+
+  async getProfile() {
+    return this.request<{ user: User }>('/profile');
   }
 
   async updateProfile(userData: Partial<User>) {
-    // In real app, PATCH /api/users/me
-    return { user: { ...this.mockUsers[0], ...userData } };
+    return this.request<{ user: User }>('/profile', { method: 'PATCH', body: JSON.stringify(userData) });
   }
+
+  // ─── Notifications ──────────────────────────────────────────────────────────
+
+  async getNotifications(params?: { unread?: boolean; page?: number }) {
+    const q = new URLSearchParams(params as any).toString();
+    return this.request<{ notifications: Notification[]; unreadCount: number }>(`/notifications${q ? '?' + q : ''}`);
+  }
+
+  async markNotificationRead(id: string) {
+    return this.request<{ notification: Notification }>(`/notifications/${id}`, { method: 'PATCH' });
+  }
+
+  async markAllNotificationsRead() {
+    return this.request<{ message: string }>('/notifications', { method: 'PATCH' });
+  }
+
+  // ─── Messages ───────────────────────────────────────────────────────────────
+
+  async getConversations() {
+    return this.request<{ conversations: Conversation[] }>('/conversations');
+  }
+
+  async startConversation(userId: string) {
+    return this.request<{ conversation: Conversation }>('/conversations', { method: 'POST', body: JSON.stringify({ userId }) });
+  }
+
+  async getMessages(conversationId: string, page = 1) {
+    return this.request<{ messages: Message[] }>(`/conversations/${conversationId}/messages?page=${page}`);
+  }
+
+  async sendMessage(conversationId: string, content: string, codeSnippet?: string, codeLanguage?: string) {
+    return this.request<{ message: Message }>(`/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content, codeSnippet, codeLanguage }),
+    });
+  }
+
+  // ─── GitHub Stats (external fetch) ──────────────────────────────────────────
 
   async getGitHubStats(username: string) {
-    return {
-      publicRepos: 10,
-      contributions: 50,
-      stars: 100,
-      totalForks: 20,
-      followers: 5,
-      following: 5
-    };
+    const res = await fetch(`https://api.github.com/users/${username}`);
+    if (!res.ok) throw new Error('GitHub user not found');
+    return res.json();
   }
 
-  // Notifications - MOCKED
-  async getNotifications(params?: any) {
-    return { notifications: [] as Notification[], unreadCount: 0, pagination: { page: 1, limit: 10, total: 0 } };
+  async getGitHubRepos(username: string) {
+    const res = await fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=30`);
+    if (!res.ok) throw new Error('Failed to fetch repos');
+    return res.json();
   }
 
-  async markNotificationRead(id: string) { return {}; }
-  async markAllNotificationsRead() { return {}; }
-
-  setGitHubToken(token: string) { }
-
-  // Messages - MOCKED
-  async getConversations() { return { conversations: [] }; }
-  async getMessages(userId: string, params?: any) {
-    return {
-      messages: [],
-      otherUser: this.mockUsers[0],
-      pagination: { page: 1, limit: 10, total: 0 }
-    };
+  setGitHubToken(token: string) {
+    // For authenticated GitHub API calls
+    this.setToken(token);
   }
-  async sendMessage(receiverId: string, content: string) { return { message: { id: 'msg-1', content } }; }
-  async getUnreadMessageCount() { return { count: 0 }; }
 }
 
-// Create and export API client instance
 export const api = new ApiClient(API_BASE_URL);
-
-// Utility functions
-export const formatTimeAgo = (dateString: string): string => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  if (diffInSeconds < 60) return 'just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
-
-  return date.toLocaleDateString();
-};
-
-export const transformFeedItem = (item: any): FeedItem => {
-  // Ensure tags is always an array
-  const tags = Array.isArray(item.tags) ? item.tags : [];
-
-  // Handle different data structures from API
-  const stats = item.stats || {
-    stars: item.stars || 0,
-    forks: item.forks || 0,
-    likes: item._count?.likes || 0,
-    comments: item._count?.comments || 0,
-    points: item.points || 0,
-    readTime: item.readTime ? `${item.readTime} min read` : undefined
-  };
-
-  return {
-    ...item,
-    tags,
-    stats,
-    timeAgo: formatTimeAgo(item.createdAt),
-    description: item.description || item.excerpt || (item.content ? item.content.substring(0, 200) + '...' : ''),
-    author: item.author || {
-      name: item.author?.name || 'Unknown',
-      username: item.author?.username || 'unknown',
-      avatar: item.author?.image || '/api/placeholder/40/40'
-    }
-  };
-};
