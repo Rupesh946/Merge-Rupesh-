@@ -45,8 +45,8 @@ const ProjectDetailPage = () => {
       try {
         setLoading(true);
         const data = await api.getProject(projectId);
-        setProject(data);
-        setComments(data.comments || []);
+        setProject(data.project);
+        setComments(data.project.comments || []);
       } catch (err) {
         setError('Failed to load project');
         console.error('Error fetching project:', err);
@@ -114,7 +114,6 @@ const ProjectDetailPage = () => {
         id: `temp_${Date.now()}`,
         content: commentContent,
         createdAt: new Date().toISOString(),
-        projectId: project.id,
         author: {
           id: userId,
           name: user?.name || '',
@@ -158,7 +157,7 @@ const ProjectDetailPage = () => {
     };
 
     const handleNewComment = (comment: Comment) => {
-      if (project && comment.projectId === project.id) {
+      if (project && (comment as any).projectId === project.id) {
         setComments(prev => [comment, ...prev.filter(c => !c.id.startsWith('temp_'))]);
       }
     };
