@@ -113,43 +113,43 @@ export default function ProfilePage() {
           // If on another user's profile, we need to determine that
           const profileUsername = user.username; // For now, we're only handling own profile
           setProjectsLoading(true);
-          const projectsResponse = await api.getProjects({ limit: 10, author: profileUsername });
+          const projectsResponse = await api.getProjects({ limit: 10, author: profileUsername } as any);
           setProjects(projectsResponse.projects || []);
 
-          // Fetch user insights/blogs
+          // Fetch user posts (insights tab uses posts)
           setInsightsLoading(true);
-          const insightsResponse = await api.getBlogPosts({ limit: 10 });
-          // Transform BlogPost to Insight
-          const transformedInsights = (insightsResponse.posts || []).map(
-            (post) => ({
-              id: post.id,
-              title: post.title,
-              excerpt: post.excerpt || post.content.substring(0, 100) + "...",
-              publishedAt: post.createdAt,
-              readTime: post.readTime ? `${post.readTime} min read` : "N/A",
-              likes: post._count?.likes || 0,
-              comments: post._count?.comments || 0,
-              tags: post.tags || [],
-              content: post.content,
-              author: post.author,
-              _count: post._count,
-              isLiked: post.isLiked,
-            }),
+          const postsResponse = await api.getPosts({ limit: 20 });
+          const userPosts = (postsResponse.posts || []).filter(
+            (p) => p.author?.username === profileUsername
           );
+          // Transform Post to Insight format
+          const transformedInsights = userPosts.map((post) => ({
+            id: post.id,
+            title: post.content.substring(0, 80) + (post.content.length > 80 ? '…' : ''),
+            excerpt: post.content,
+            publishedAt: new Date(post.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+            readTime: '',
+            likes: post._count?.likes || 0,
+            comments: post._count?.comments || 0,
+            tags: post.tags || [],
+            content: post.content,
+            author: post.author,
+            _count: post._count,
+            isLiked: post.isLiked,
+          }));
           setInsights(transformedInsights);
 
           // Fetch user activity
           setActivityLoading(true);
-          const activityResponse = await api.getNotifications({ limit: 10 });
+          const activityResponse = await api.getNotifications({ page: 1 });
           // Transform notifications to activity format
           const activityData = (activityResponse.notifications || []).map(
             (notification) => ({
               id: notification.id,
               type: notification.type || "notification",
               action: notification.message || notification.title || "Activity",
-              target: notification.target || notification.id || "N/A",
-              timeAgo:
-                notification.timeAgo || notification.createdAt || "Just now",
+              target: notification.targetId || notification.id || "N/A",
+              timeAgo: notification.createdAt || "Just now",
             }),
           );
           setActivity(activityData);
