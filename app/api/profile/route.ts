@@ -5,7 +5,7 @@ import { getUserFromRequest } from '@/lib/auth';
 export async function GET(req: Request) {
     try {
         const user = await getUserFromRequest(req);
-        const { password: _, ...userWithoutPassword } = user;
+        const { password: _, githubAccessToken: _gh, ...userWithoutSensitive } = user as any;
 
         const counts = await prisma.user.findUnique({
             where: { id: user.id },
@@ -14,7 +14,7 @@ export async function GET(req: Request) {
             },
         });
 
-        return NextResponse.json({ user: { ...userWithoutPassword, ...counts } });
+        return NextResponse.json({ user: { ...userWithoutSensitive, ...counts } });
     } catch (error: any) {
         if (error?.message === 'No token provided' || error?.message === 'User not found') {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -39,8 +39,8 @@ export async function PATCH(req: Request) {
             data: updateData,
         });
 
-        const { password: _, ...userWithoutPassword } = updated;
-        return NextResponse.json({ user: userWithoutPassword });
+        const { password: _, githubAccessToken: _gh, ...userWithoutSensitive } = updated as any;
+        return NextResponse.json({ user: userWithoutSensitive });
     } catch (error: any) {
         if (error?.message === 'No token provided' || error?.message === 'User not found') {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });

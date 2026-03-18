@@ -35,7 +35,7 @@ export async function GET(req: Request) {
             );
         }
 
-        const { password: _, ...userWithoutPassword } = user;
+        const { password: _, githubAccessToken: _gh, ...userWithoutPassword } = user;
 
         return NextResponse.json({
             user: userWithoutPassword

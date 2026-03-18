@@ -127,12 +127,13 @@ export default function ProjectsPage() {
     }
   };
 
-  // Function to fetch user's GitHub repositories
+  // Function to fetch user's GitHub repositories via backend proxy
   const fetchUserRepos = async () => {
     try {
       setLoadingRepos(true);
+      setSubmitError(null);
 
-      // First check if the user is logged in with a main auth token
+      // Use the app JWT — no need for a separate github_token in localStorage
       const authToken = typeof window !== 'undefined'
         ? localStorage.getItem('auth_token')
         : null;
@@ -143,47 +144,33 @@ export default function ProjectsPage() {
         return;
       }
 
-      // Check if there's a GitHub token stored specifically for GitHub API calls
-      const githubToken = typeof window !== 'undefined'
-        ? localStorage.getItem('github_token')
-        : null;
+      // Call our backend proxy which uses the stored githubAccessToken
+      const response = await fetch('/api/github/repos?sort=updated&per_page=50', {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
 
-      // If no separate GitHub token, the user may need to link their GitHub account
-      // via the backend API that manages the tokens
-      if (!githubToken) {
-        // Try to access the GitHub API directly with just the auth token
-        // This might work if the backend manages the GitHub token internally
-        // For now, let's provide a suggestion to the user
-        setSubmitError("GitHub account not linked. Please connect your GitHub account first.");
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          // GitHub not connected — prompt user to sign in with GitHub
+          setSubmitError(
+            "GitHub account not connected. Please sign in with GitHub to import your repositories."
+          );
+        } else {
+          setSubmitError(data.message || "Failed to fetch repositories.");
+        }
         setLoadingRepos(false);
         return;
       }
 
-      // Fetch user's repositories from GitHub API
-      const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=20', {
-        headers: {
-          'Authorization': `token ${githubToken}`,
-          'Accept': 'application/vnd.github.v3+json',
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          setSubmitError("Invalid GitHub token. Please reconnect your GitHub account.");
-          setLoadingRepos(false);
-          return;
-        } else {
-          throw new Error(`Failed to fetch repositories: ${response.status} ${response.statusText}`);
-        }
-      }
-
-      const repos = await response.json();
-      setUserRepos(repos);
+      setUserRepos(data.repos);
       setShowRepoPicker(true);
-      setSubmitError(null);
     } catch (error) {
       console.error("Error fetching user repositories:", error);
-      setSubmitError(error instanceof Error ? error.message : "Failed to fetch repositories. Please check your GitHub connection.");
+      setSubmitError(error instanceof Error ? error.message : "Failed to fetch repositories.");
     } finally {
       setLoadingRepos(false);
     }
@@ -454,14 +441,16 @@ export default function ProjectsPage() {
                         <CardHeader className="pb-4">
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center space-x-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={project.owner.avatar_url || "/api/placeholder/40/40"} />
-                                <AvatarFallback className="text-xs">{project.owner.login[0]}</AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="text-sm font-light">{project.owner.login}</p>
-                                <p className="text-xs text-muted-foreground font-mono">@{project.owner.login}</p>
-                              </div>
+                              <a href={project.owner.html_url} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={project.owner.avatar_url || "/api/placeholder/40/40"} />
+                                  <AvatarFallback className="text-xs">{project.owner.login[0]}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-sm font-light">{project.owner.login}</p>
+                                  <p className="text-xs text-muted-foreground font-mono">@{project.owner.login}</p>
+                                </div>
+                              </a>
                             </div>
                             <div className="flex items-center space-x-3">
                               <Badge variant="outline" className="font-light border-primary/40 text-primary text-xs uppercase tracking-[0.1em]">
@@ -578,14 +567,16 @@ export default function ProjectsPage() {
                         <CardHeader className="pb-4">
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center space-x-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={project.author.image || "/api/placeholder/40/40"} />
-                                <AvatarFallback className="text-xs">{project.author.name[0]}</AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="text-sm font-light">{project.author.name}</p>
-                                <p className="text-xs text-muted-foreground font-mono">@{project.author.username}</p>
-                              </div>
+                              <Link href={`/profile/${project.author.username}`} className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={project.author.image || "/api/placeholder/40/40"} />
+                                  <AvatarFallback className="text-xs">{project.author.name[0]}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-sm font-light">{project.author.name}</p>
+                                  <p className="text-xs text-muted-foreground font-mono">@{project.author.username}</p>
+                                </div>
+                              </Link>
                             </div>
                             <div className="flex items-center space-x-3">
                               {project.featured && (
@@ -889,23 +880,6 @@ export default function ProjectsPage() {
                         variant="outline"
                         className="w-full"
                         onClick={() => {
-                          const githubToken = typeof window !== 'undefined'
-                            ? localStorage.getItem('github_token')
-                            : null;
-                          const mainToken = typeof window !== 'undefined'
-                            ? localStorage.getItem('auth_token')
-                            : null;
-
-                          if (!mainToken) {
-                            setSubmitError("Please log in first.");
-                            return;
-                          }
-
-                          if (!githubToken) {
-                            setSubmitError("GitHub account not linked. Please link it in your profile settings first.");
-                            return;
-                          }
-
                           fetchUserRepos();
                         }}
                         disabled={loadingRepos}

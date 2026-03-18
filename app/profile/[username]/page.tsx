@@ -86,6 +86,12 @@ interface User {
   website?: string;
   githubUsername?: string;
   createdAt: string;
+  _count?: {
+    followers: number;
+    following: number;
+    projects: number;
+    posts: number;
+  };
 }
 
 export default function UserProfilePage() {
@@ -110,6 +116,10 @@ export default function UserProfilePage() {
   const [activityLoading, setActivityLoading] = useState(true);
   const [githubStatsLoading, setGithubStatsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
+
+  // Interaction State
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
 
   // Fetch user profile data
   useEffect(() => {
@@ -136,6 +146,7 @@ export default function UserProfilePage() {
         const userResponse = await api.getUser(profileUsername);
         const userObject = userResponse.user;
         setUserProfile(userObject);
+        setIsFollowing(!!userObject.isFollowing);
 
         // Fetch user projects — server-side author filter
         setProjectsLoading(true);
@@ -220,7 +231,48 @@ export default function UserProfilePage() {
     };
 
     fetchUserProfile();
-  }, [username, router]);
+  }, [username, router, isAuthenticated, currentUser]);
+
+  const handleFollowToggle = async () => {
+    if (!userProfile) return;
+    try {
+      setIsFollowLoading(true);
+      if (isFollowing) {
+        await api.unfollowUser(userProfile.username);
+        setIsFollowing(false);
+        setUserProfile(prev => prev ? {
+          ...prev,
+          _count: {
+            ...prev._count!,
+            followers: Math.max(0, (prev._count?.followers || 0) - 1)
+          }
+        } : prev);
+      } else {
+        await api.followUser(userProfile.username);
+        setIsFollowing(true);
+        setUserProfile(prev => prev ? {
+          ...prev,
+          _count: {
+            ...prev._count!,
+            followers: (prev._count?.followers || 0) + 1
+          }
+        } : prev);
+      }
+    } catch (error) {
+      console.error("Failed to toggle follow status:", error);
+    } finally {
+      setIsFollowLoading(false);
+    }
+  };
+
+  const handleMessage = async () => {
+    if (!userProfile) return;
+    // We can open the chat UI programmatically by navigating to the chat modal
+    // Either by pushing query params like `?chat=userId` or letting the user select it
+    // Assuming the navbar handles global chat state, or routing to a messages page:
+    // This is a placeholder since the app uses a global MessagesModal in Navbar
+    router.push(`/?messageUser=${userProfile.id}`);
+  };
 
   if (loading) {
     return (
@@ -309,25 +361,47 @@ export default function UserProfilePage() {
                       </div>
 
                       {/* Action Buttons - shown only for other users, not current user */}
-                      {isAuthenticated && currentUser?.username !== userProfile.username && (
+                      {isAuthenticated && currentUser?.id !== userProfile.id && (
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="rounded-full">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="rounded-full"
+                            onClick={handleMessage}
+                          >
                             <MessageCircle className="mr-2 h-4 w-4" />
                             Message
                           </Button>
-                          <Button variant="default" size="sm" className="rounded-full">
-                            <UserPlus className="mr-2 h-4 w-4" />
-                            Follow
+                          <Button 
+                            variant={isFollowing ? "outline" : "default"}
+                            size="sm" 
+                            className="rounded-full"
+                            onClick={handleFollowToggle}
+                            disabled={isFollowLoading}
+                          >
+                            {isFollowing ? (
+                              <>
+                                <UserMinus className="mr-2 h-4 w-4" />
+                                Unfollow
+                              </>
+                            ) : (
+                              <>
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                Follow
+                              </>
+                            )}
                           </Button>
                         </div>
                       )}
 
                       {/* Own profile actions */}
-                      {isAuthenticated && currentUser?.username === userProfile.username && (
+                      {isAuthenticated && currentUser?.id === userProfile.id && (
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="rounded-full">
-                            <Settings className="mr-2 h-4 w-4" />
-                            Edit Profile
+                          <Button variant="outline" size="sm" className="rounded-full" asChild>
+                            <Link href="/settings">
+                              <Settings className="mr-2 h-4 w-4" />
+                              Edit Profile
+                            </Link>
                           </Button>
                         </div>
                       )}
@@ -370,7 +444,7 @@ export default function UserProfilePage() {
                 {/* Stats Bar */}
                 <div className="mt-6 grid grid-cols-2 md:grid-cols-6 gap-4 pt-4 border-t border-border/30">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{totalProjects}</div>
+                    <div className="text-2xl font-bold text-primary">{userProfile._count?.projects || 0}</div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Projects</div>
                   </div>
                   <div className="text-center">
@@ -378,19 +452,23 @@ export default function UserProfilePage() {
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Stars</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{githubStats.publicRepos}</div>
+                    <div className="text-2xl font-bold text-primary">
+                      {githubStatsLoading ? '-' : (githubStats.publicRepos || '-')}
+                    </div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Repos</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-secondary">{githubStats.contributions?.toLocaleString() || 0}</div>
+                    <div className="text-2xl font-bold text-secondary">
+                      {githubStatsLoading ? '-' : (githubStats.contributions || '-')}
+                    </div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Contribs</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{githubStats.followers.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-primary">{userProfile._count?.followers || 0}</div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Followers</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-secondary">{githubStats.following.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-secondary">{userProfile._count?.following || 0}</div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Following</div>
                   </div>
                 </div>

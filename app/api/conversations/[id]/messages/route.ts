@@ -68,6 +68,22 @@ export async function POST(
             where: { id: conversationId },
             data: { updatedAt: new Date() },
         });
+        
+        // Notify the recipient
+        const otherParticipant = await prisma.conversationParticipant.findFirst({
+            where: { conversationId, userId: { not: currentUser.id } }
+        });
+
+        if (otherParticipant) {
+            await prisma.notification.create({
+                data: {
+                    type: 'message',
+                    message: `${currentUser.name} sent you a message`,
+                    targetId: conversationId,
+                    userId: otherParticipant.userId,
+                }
+            });
+        }
 
         return NextResponse.json({ message }, { status: 201 });
     } catch (error: any) {

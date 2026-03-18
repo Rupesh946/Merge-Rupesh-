@@ -21,10 +21,14 @@ export async function GET(req: Request) {
         });
 
         const unreadCount = await prisma.notification.count({
-            where: { userId: currentUser.id, read: false },
+            where: { userId: currentUser.id, read: false, type: { not: 'message' } },
         });
 
-        return NextResponse.json({ notifications, unreadCount, page });
+        const unreadMessagesCount = await prisma.notification.count({
+            where: { userId: currentUser.id, read: false, type: 'message' },
+        });
+
+        return NextResponse.json({ notifications, unreadCount, unreadMessagesCount, page });
     } catch (error: any) {
         if (error?.message === 'No token provided' || error?.message === 'User not found') return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
         return NextResponse.json({ message: 'Internal server error' }, { status: 500 });

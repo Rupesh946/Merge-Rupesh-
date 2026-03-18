@@ -1,639 +1,749 @@
 "use client";
 
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Navbar } from "@/components/navbar";
 import { useApi } from "@/hooks/use-api";
 import { api, Post, User } from "@/lib/api";
 import {
-  Code2, Heart, MessageCircle, Share, ExternalLink,
-  TrendingUp, Search, Plus, Settings, ArrowUp, X, Send, ChevronDown
+    Heart,
+    MessageCircle,
+    Bookmark,
+    MoreHorizontal,
+    Code2,
+    Send,
+    Loader2,
+    ArrowRight,
+    Plus,
+    UserPlus,
+    ExternalLink,
+    Zap,
+    Cpu,
+    Globe,
+    Layers,
+    RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect, useCallback, useRef } from "react";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface RssItem {
+    id: string;
+    title: string;
+    summary: string;
+    url: string;
+    imageUrl: string | null;
+    author: string;
+    sourceName: string;
+    sourceColor: string;
+    sourceEmoji: string;
+    publishedAt: string;
+    tags: string[];
+    category: "ai" | "coding" | "design" | "devops" | "news";
+}
+
+// ─── Helper ───────────────────────────────────────────────────────────────────
 function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `${d}d ago`;
+    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function PostCard({
-  post,
-  onLike,
-}: {
-  post: Post;
-  onLike: (id: string, liked: boolean) => void;
-}) {
-  const [showComments, setShowComments] = useState(false);
-  const [comment, setComment] = useState("");
-  const [submittingComment, setSubmittingComment] = useState(false);
-  const [localComments, setLocalComments] = useState<any[]>(post.comments || []);
-
-  const handleComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!comment.trim() || submittingComment) return;
-    setSubmittingComment(true);
-    try {
-      const res = await api.addPostComment(post.id, comment.trim());
-      setLocalComments((prev) => [...prev, res.comment]);
-      setComment("");
-    } catch (err) {
-      console.error("Comment error:", err);
-    } finally {
-      setSubmittingComment(false);
-    }
-  };
-
-  return (
-    <Card className="border-primary/20 bg-card/30 hover-lift">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <Link href={`/profile/${post.author.username}`}>
-              <Avatar className="h-8 w-8 cursor-pointer">
-                <AvatarImage src={post.author.image || ""} />
-                <AvatarFallback className="text-xs">{post.author.name[0]}</AvatarFallback>
-              </Avatar>
-            </Link>
-            <div>
-              <Link href={`/profile/${post.author.username}`}>
-                <p className="text-sm font-light hover:text-primary cursor-pointer transition-colors">
-                  {post.author.name}
-                </p>
-              </Link>
-              <p className="text-xs text-muted-foreground font-mono">@{post.author.username}</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            {post.codeLanguage && (
-              <Badge variant="outline" className="font-light border-primary/40 text-primary text-xs uppercase tracking-[0.1em]">
-                {post.codeLanguage}
-              </Badge>
-            )}
-            <span className="text-xs text-muted-foreground font-mono">{timeAgo(post.createdAt)}</span>
-          </div>
-        </div>
-
-        <p className="text-sm font-light leading-relaxed mb-3">{post.content}</p>
-
-        {post.codeSnippet && (
-          <pre className="bg-muted/40 border border-border/30 rounded-lg p-4 text-xs font-mono overflow-x-auto mb-3 text-foreground/80">
-            <code>{post.codeSnippet}</code>
-          </pre>
-        )}
-
-        {post.imageUrl && (
-          <img
-            src={post.imageUrl}
-            alt="Post image"
-            className="rounded-lg border border-border/20 w-full object-cover max-h-72 mb-3"
-          />
-        )}
-
-        <div className="flex flex-wrap gap-1.5 mt-1">
-          {post.tags.slice(0, 4).map((tag) => (
-            <Badge key={tag} variant="outline" className="font-light border-border/30 text-xs">
-              #{tag}
-            </Badge>
-          ))}
-        </div>
-      </CardHeader>
-
-      <CardContent>
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`font-light gap-2 ${post.isLiked ? "text-red-500" : ""}`}
-            onClick={() => onLike(post.id, !!post.isLiked)}
-          >
-            <Heart className={`h-3 w-3 ${post.isLiked ? "fill-current" : ""}`} />
-            {post._count.likes}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="font-light gap-2"
-            onClick={() => setShowComments((v) => !v)}
-          >
-            <MessageCircle className="h-3 w-3" />
-            {post._count.comments}
-          </Button>
-          <Button variant="ghost" size="sm" className="font-light gap-2">
-            <Share className="h-3 w-3" />
-          </Button>
-          <Button variant="ghost" size="sm" className="font-light ml-auto" asChild>
-            <Link href={`/posts/${post.id}`}>
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          </Button>
-        </div>
-
-        {showComments && (
-          <div className="mt-4 pt-4 border-t border-border/20 space-y-3">
-            {localComments.map((c) => (
-              <div key={c.id} className="flex items-start space-x-2">
-                <Avatar className="h-6 w-6 mt-0.5">
-                  <AvatarImage src={c.author?.image || ""} />
-                  <AvatarFallback className="text-xs">{c.author?.name?.[0] || "?"}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 bg-muted/30 rounded-lg px-3 py-2">
-                  <p className="text-xs font-light font-mono text-muted-foreground mb-1">
-                    @{c.author?.username}
-                  </p>
-                  <p className="text-sm font-light">{c.content}</p>
-                </div>
-              </div>
-            ))}
-            <form onSubmit={handleComment} className="flex items-center space-x-2 mt-2">
-              <Input
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Write a comment…"
-                className="text-sm h-8 bg-muted/20 border-border/30"
-              />
-              <Button type="submit" size="sm" variant="ghost" disabled={submittingComment}>
-                <Send className="h-3 w-3" />
-              </Button>
-            </form>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function CreatePostModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Post) => void }) {
-  const [content, setContent] = useState("");
-  const [codeSnippet, setCodeSnippet] = useState("");
-  const [codeLanguage, setCodeLanguage] = useState("");
-  const [tags, setTags] = useState("");
-  const [showCode, setShowCode] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!content.trim()) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.createPost({
-        content: content.trim(),
-        codeSnippet: showCode && codeSnippet.trim() ? codeSnippet.trim() : undefined,
-        codeLanguage: showCode && codeLanguage.trim() ? codeLanguage.trim() : undefined,
-        tags: tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
-      });
-      onCreated(res.post);
-      onClose();
-    } catch (err: any) {
-      setError(err.message || "Failed to create post");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <Card className="w-full max-w-2xl mx-4 border-primary/20 bg-card">
-        <CardHeader className="pb-4 flex flex-row items-center justify-between">
-          <CardTitle className="text-lg font-light">Create Post</CardTitle>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Share a thought, snippet, or idea…"
-              className="min-h-28 bg-muted/20 border-border/30 font-light resize-none"
-              required
+// ─── Animated Background ──────────────────────────────────────────────────────
+function GridBackground() {
+    return (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div
+                className="absolute inset-0 opacity-[0.04]"
+                style={{
+                    backgroundImage: `
+            linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)
+          `,
+                    backgroundSize: "80px 80px",
+                    animation: "gridMove 30s linear infinite",
+                }}
             />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="font-light gap-2"
-              onClick={() => setShowCode((v) => !v)}
+            <div className="absolute top-1/4 left-[8%] text-primary/10 text-5xl font-mono animate-pulse select-none">
+                {"{}"}
+            </div>
+            <div
+                className="absolute top-1/2 right-[12%] text-primary/8 text-3xl font-mono animate-pulse select-none"
+                style={{ animationDelay: "3s" }}
             >
-              <Code2 className="h-3 w-3" />
-              {showCode ? "Remove Code" : "Add Code Snippet"}
-            </Button>
-            {showCode && (
-              <div className="space-y-2">
-                <Input
-                  value={codeLanguage}
-                  onChange={(e) => setCodeLanguage(e.target.value)}
-                  placeholder="Language (e.g. TypeScript, Python)"
-                  className="text-sm bg-muted/20 border-border/30"
-                />
-                <Textarea
-                  value={codeSnippet}
-                  onChange={(e) => setCodeSnippet(e.target.value)}
-                  placeholder="Paste your code here…"
-                  className="min-h-32 font-mono text-xs bg-muted/20 border-border/30 resize-none"
-                />
-              </div>
-            )}
-            <Input
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="Tags (comma separated): react, typescript, webdev"
-              className="text-sm bg-muted/20 border-border/30"
-            />
-            {error && <p className="text-sm text-red-500 font-light">{error}</p>}
-            <div className="flex items-center justify-end space-x-3 pt-2">
-              <Button type="button" variant="ghost" onClick={onClose} className="font-light">Cancel</Button>
-              <Button type="submit" className="font-light" disabled={loading || !content.trim()}>
-                {loading ? "Posting…" : "Post"}
-              </Button>
+                {"</>"}
             </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
-  );
+            <div
+                className="absolute bottom-1/4 left-[20%] text-primary/10 text-4xl font-mono animate-pulse select-none"
+                style={{ animationDelay: "6s" }}
+            >
+                {"()"}
+            </div>
+            <div className="absolute top-1/3 right-1/4 w-1.5 h-1.5 bg-primary/30 rounded-full animate-ping" style={{ animationDelay: "1s" }} />
+            <div className="absolute bottom-1/3 left-1/2 w-1.5 h-1.5 bg-primary/20 rounded-full animate-ping" style={{ animationDelay: "4s" }} />
+        </div>
+    );
 }
 
-export default function HomePage() {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [showScrollTop, setShowScrollTop] = useState(false);
-  const [showCreatePost, setShowCreatePost] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+// ─── Post Card (user posts) ───────────────────────────────────────────────────
+function PostCard({ post: initial, index }: { post: Post; index: number }) {
+    const [post, setPost] = useState(initial);
+    const [hearted, setHearted] = useState(!!initial.isLiked);
+    const [bookmarked, setBookmarked] = useState(!!initial.isBookmarked);
+    const [showComments, setShowComments] = useState(false);
+    const [commentText, setCommentText] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const [localComments, setLocalComments] = useState(initial.comments ?? []);
 
-  // ── Initial feed load ──────────────────────────────────────────────────────
-  const { data: feedData, error: feedError } = useApi(() => api.getFeed({ page: 1, limit: 15 }), []);
-  const { data: tagsData, loading: tagsLoading } = useApi(() => api.getTrendingTags(), []);
-  const { data: usersData, loading: usersLoading } = useApi(() => api.searchUsers("", 5), []);
+    const toggleHeart = async () => {
+        const was = hearted;
+        setHearted(!was);
+        setPost((p) => ({ ...p, _count: { ...p._count, likes: p._count.likes + (was ? -1 : 1) } }));
+        try {
+            if (was) await api.unlikePost(post.id);
+            else await api.likePost(post.id);
+        } catch {
+            setHearted(was);
+            setPost((p) => ({ ...p, _count: { ...p._count, likes: p._count.likes + (was ? 1 : -1) } }));
+        }
+    };
 
-  useEffect(() => {
-    if (feedData?.posts) {
-      setPosts(feedData.posts);
-      setHasMore(feedData.posts.length === 15);
-      setInitialLoading(false);
-    } else if (feedError) {
-      // If user is not following anyone, fallback to explore (public posts)
-      api.getExplore({ type: "posts", page: 1, limit: 15 })
-        .then((d) => {
-          setPosts(d.posts || []);
-          setHasMore((d.posts?.length || 0) === 15);
-        })
-        .catch(() => { })
-        .finally(() => setInitialLoading(false));
-    }
-  }, [feedData, feedError]);
+    const toggleBookmark = async () => {
+        const was = bookmarked;
+        setBookmarked(!was);
+        try {
+            if (was) await api.unbookmarkPost(post.id);
+            else await api.bookmarkPost(post.id);
+        } catch { setBookmarked(was); }
+    };
 
-  // ── Load more ─────────────────────────────────────────────────────────────
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    try {
-      const res = await api.getFeed({ page: nextPage, limit: 15 });
-      if (res?.posts?.length) {
-        setPosts((prev) => {
-          const ids = new Set(prev.map((p) => p.id));
-          return [...prev, ...res.posts.filter((p) => !ids.has(p.id))];
-        });
-        setHasMore(res.posts.length === 15);
-        setPage(nextPage);
-      } else {
-        setHasMore(false);
-      }
-    } catch {
-      setHasMore(false);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [page, loadingMore, hasMore]);
+    const submitComment = async () => {
+        if (!commentText.trim() || submitting) return;
+        setSubmitting(true);
+        try {
+            const res = await api.addPostComment(post.id, commentText.trim());
+            setLocalComments((p) => [...p, res.comment]);
+            setPost((p) => ({ ...p, _count: { ...p._count, comments: p._count.comments + 1 } }));
+            setCommentText("");
+        } finally { setSubmitting(false); }
+    };
 
-  // ── Scroll handler ─────────────────────────────────────────────────────────
-  const handleScroll = useCallback(() => {
-    const scrollTop = window.pageYOffset;
-    setShowScrollTop(scrollTop > 400);
-    if (
-      window.innerHeight + document.documentElement.scrollTop >=
-      document.documentElement.offsetHeight - 1000 &&
-      hasMore && !loadingMore && !initialLoading
-    ) {
-      loadMore();
-    }
-  }, [hasMore, loadingMore, initialLoading, loadMore]);
-
-  useEffect(() => {
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [handleScroll]);
-
-  // ── Like toggle ────────────────────────────────────────────────────────────
-  const handleLike = async (postId: string, currentlyLiked: boolean) => {
-    // Optimistic update
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === postId
-          ? {
-            ...p,
-            isLiked: !currentlyLiked,
-            _count: { ...p._count, likes: currentlyLiked ? p._count.likes - 1 : p._count.likes + 1 },
-          }
-          : p
-      )
-    );
-    try {
-      if (currentlyLiked) await api.unlikePost(postId);
-      else await api.likePost(postId);
-    } catch {
-      // Revert
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId
-            ? {
-              ...p,
-              isLiked: currentlyLiked,
-              _count: { ...p._count, likes: currentlyLiked ? p._count.likes + 1 : p._count.likes - 1 },
-            }
-            : p
-        )
-      );
-    }
-  };
-
-  const handleFollow = async (username: string) => {
-    try {
-      await api.followUser(username);
-    } catch (err) {
-      console.error("Follow error:", err);
-    }
-  };
-
-  const trendingTags = tagsData?.tags || [];
-  const suggestedUsers: User[] = usersData?.users || [];
-
-  const filteredPosts = searchQuery
-    ? posts.filter(
-      (p) =>
-        p.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        p.author.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    : posts;
-
-  return (
-    <div className="min-h-screen bg-background">
-      <Navbar currentPage="home" />
-
-      {showCreatePost && (
-        <CreatePostModal
-          onClose={() => setShowCreatePost(false)}
-          onCreated={(newPost) => setPosts((prev) => [newPost, ...prev])}
-        />
-      )}
-
-      <div className="pt-20 px-8">
-        <div className="max-w-8xl mx-auto">
-          <div className="grid lg:grid-cols-12 gap-12">
-            {/* ── Main Feed ─────────────────────────────────────────────── */}
-            <div className="lg:col-span-8">
-              {/* Search + create post */}
-              <div className="mb-8 flex items-center gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary/60" />
-                  <Input
-                    placeholder="Search your feed…"
-                    className="pl-12 bg-muted/30 border-primary/20 font-light focus:border-primary/40"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-                <Button
-                  size="sm"
-                  className="font-light gap-2 shrink-0"
-                  onClick={() => setShowCreatePost(true)}
-                >
-                  <Plus className="h-3 w-3" />
-                  New Post
-                </Button>
-              </div>
-
-              {/* Posts */}
-              <div className="space-y-8">
-                {initialLoading ? (
-                  Array.from({ length: 3 }).map((_, i) => (
-                    <Card key={i} className="border-primary/20 bg-card/30">
-                      <CardHeader className="pb-4">
-                        <div className="flex items-center space-x-3 mb-4">
-                          <div className="h-8 w-8 bg-muted rounded-full animate-pulse" />
-                          <div className="space-y-2">
-                            <div className="h-4 w-24 bg-muted rounded animate-pulse" />
-                            <div className="h-3 w-16 bg-muted rounded animate-pulse" />
-                          </div>
-                        </div>
-                        <div className="h-4 w-full bg-muted rounded animate-pulse mb-2" />
-                        <div className="h-4 w-3/4 bg-muted rounded animate-pulse" />
-                      </CardHeader>
-                    </Card>
-                  ))
-                ) : filteredPosts.length === 0 ? (
-                  <div className="text-center py-24">
-                    <Code2 className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-                    <p className="text-muted-foreground font-light text-lg mb-2">Your feed is empty</p>
-                    <p className="text-muted-foreground font-light text-sm mb-6">
-                      Follow developers or create your first post!
-                    </p>
-                    <Button className="font-light gap-2" onClick={() => setShowCreatePost(true)}>
-                      <Plus className="h-4 w-4" />
-                      Create a Post
-                    </Button>
-                  </div>
-                ) : (
-                  filteredPosts.map((post) => (
-                    <PostCard key={post.id} post={post} onLike={handleLike} />
-                  ))
-                )}
-
-                {loadingMore && (
-                  <div className="flex justify-center py-6">
-                    <div className="flex items-center gap-3 text-muted-foreground">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-                      <span className="text-sm font-light">Loading more…</span>
-                    </div>
-                  </div>
-                )}
-
-                {!hasMore && filteredPosts.length > 0 && (
-                  <div className="flex flex-col items-center py-8 text-muted-foreground">
-                    <div className="w-12 h-px bg-border mb-3" />
-                    <p className="text-sm font-light">You're all caught up</p>
-                    <p className="text-xs font-mono mt-1">{filteredPosts.length} posts loaded</p>
-                  </div>
-                )}
-              </div>
+    return (
+        <article className="relative border-t border-primary/15 py-8 group">
+            <div className="absolute top-8 right-0 text-xs font-mono text-muted-foreground/20 select-none">
+                {String(index + 1).padStart(2, "0")}
             </div>
-
-            {/* ── Sidebar ─────────────────────────────────────────────────── */}
-            <div className="lg:col-span-4 space-y-8">
-              {/* Trending Tags */}
-              <Card className="border-primary/20 bg-card/20">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-lg font-light flex items-center space-x-2">
-                    <TrendingUp className="h-4 w-4 text-primary" />
-                    <span>Trending</span>
-                  </CardTitle>
-                </CardHeader>
-                <div className="px-6 pb-6">
-                  {tagsLoading ? (
-                    <div className="space-y-3">
-                      {Array.from({ length: 6 }).map((_, i) => (
-                        <div key={i} className="flex items-center justify-between">
-                          <div className="h-4 w-24 bg-muted rounded animate-pulse" />
-                          <div className="h-4 w-8 bg-muted rounded animate-pulse" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : trendingTags.length === 0 ? (
-                    <p className="text-sm text-muted-foreground font-light">No tags yet — start posting!</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {trendingTags.slice(0, 10).map((tag, i) => (
-                        <div key={tag.name} className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <span className="text-xs font-mono text-muted-foreground w-4">
-                              {String(i + 1).padStart(2, "0")}
-                            </span>
-                            <Badge variant="outline" className="font-light border-border/30 text-xs">
-                              #{tag.name}
-                            </Badge>
-                          </div>
-                          <span className="text-xs font-mono text-muted-foreground">{tag.count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </Card>
-
-              {/* Who to Follow */}
-              <Card className="border-primary/20 bg-card/20">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-lg font-light">Who to Follow</CardTitle>
-                </CardHeader>
-                <div className="px-6 pb-6 space-y-5">
-                  {usersLoading ? (
-                    Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="flex items-center space-x-3">
-                        <div className="h-9 w-9 bg-muted rounded-full animate-pulse" />
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 w-20 bg-muted rounded animate-pulse" />
-                          <div className="h-3 w-32 bg-muted rounded animate-pulse" />
-                        </div>
-                      </div>
-                    ))
-                  ) : suggestedUsers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground font-light">No users found yet.</p>
-                  ) : (
-                    suggestedUsers.map((user) => (
-                      <div key={user.id} className="flex items-start space-x-3">
-                        <Link href={`/profile/${user.username}`}>
-                          <Avatar className="h-9 w-9 cursor-pointer">
-                            <AvatarImage src={user.image || ""} />
-                            <AvatarFallback className="text-xs">{user.name[0]}</AvatarFallback>
-                          </Avatar>
-                        </Link>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <Link href={`/profile/${user.username}`}>
-                              <p className="text-sm font-light truncate hover:text-primary transition-colors cursor-pointer">
-                                {user.name}
-                              </p>
-                            </Link>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="font-light text-xs px-3 shrink-0 ml-2"
-                              onClick={() => handleFollow(user.username)}
-                            >
-                              Follow
-                            </Button>
-                          </div>
-                          <p className="text-xs text-muted-foreground font-mono">@{user.username}</p>
-                          {user.bio && (
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{user.bio}</p>
-                          )}
-                          {user._count && (
-                            <p className="text-xs text-muted-foreground font-mono mt-1">
-                              {user._count.followers} followers
+            <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-4">
+                    <div className="w-6 h-px bg-primary/60" />
+                    <Link href={`/profile/${post.author.username}`} className="flex items-center space-x-3 group/author">
+                        <Avatar className="h-8 w-8 border border-primary/20">
+                            <AvatarImage src={post.author.image ?? ""} />
+                            <AvatarFallback className="text-xs font-light bg-primary/10 text-primary">
+                                {(post.author.name ?? post.author.username)[0].toUpperCase()}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div>
+                            <p className="text-xs font-light tracking-[0.1em] uppercase group-hover/author:text-primary transition-colors">
+                                {post.author.username}
                             </p>
-                          )}
+                            <p className="text-[10px] font-mono text-muted-foreground/50">{timeAgo(post.createdAt)}</p>
                         </div>
-                      </div>
-                    ))
-                  )}
-                  <Button variant="ghost" size="sm" className="w-full font-light text-muted-foreground gap-1" asChild>
-                    <Link href="/explore">
-                      <ChevronDown className="h-3 w-3" />
-                      Explore more developers
                     </Link>
-                  </Button>
                 </div>
-              </Card>
-
-              {/* Quick Actions */}
-              <Card className="border-primary/20 bg-card/20">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-lg font-light">Quick Actions</CardTitle>
-                </CardHeader>
-                <div className="px-6 pb-6 space-y-3">
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start font-light"
-                    onClick={() => setShowCreatePost(true)}
-                  >
-                    <Plus className="mr-3 h-4 w-4" />
-                    New Post
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start font-light" asChild>
-                    <Link href="/projects">
-                      <Code2 className="mr-3 h-4 w-4" />
-                      Browse Projects
-                    </Link>
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start font-light" asChild>
-                    <Link href="/settings">
-                      <Settings className="mr-3 h-4 w-4" />
-                      Edit Profile
-                    </Link>
-                  </Button>
-                </div>
-              </Card>
+                <button className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/40 hover:text-muted-foreground p-1">
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                </button>
             </div>
-          </div>
-        </div>
-      </div>
+            <div className="pl-[calc(1.5rem+1.5rem+0.75rem)]">
+                {post.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {post.tags.slice(0, 4).map((tag) => (
+                            <Badge key={tag} variant="outline" className="text-[10px] font-light border-primary/30 text-primary uppercase tracking-[0.1em] px-2 py-0">
+                                {tag}
+                            </Badge>
+                        ))}
+                    </div>
+                )}
+                <p className="text-base font-light story-text text-foreground/90 leading-relaxed mb-5">{post.content}</p>
+                {post.codeSnippet && (
+                    <div className="border border-primary/20 bg-primary/5 mb-5 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2 border-b border-primary/10">
+                            <div className="flex items-center space-x-2">
+                                <Code2 className="h-3 w-3 text-primary/60" />
+                                <span className="text-[10px] font-mono text-primary/60 uppercase tracking-[0.1em]">{post.codeLanguage || "code"}</span>
+                            </div>
+                            <div className="flex space-x-1">
+                                <div className="w-2 h-2 rounded-full bg-primary/20" /><div className="w-2 h-2 rounded-full bg-primary/30" /><div className="w-2 h-2 rounded-full bg-primary/40" />
+                            </div>
+                        </div>
+                        <pre className="p-4 text-xs font-mono overflow-auto max-h-48 text-foreground/80">
+                            <code>{post.codeSnippet.substring(0, 400)}{post.codeSnippet.length > 400 ? "…" : ""}</code>
+                        </pre>
+                    </div>
+                )}
+                {post.imageUrl && (
+                    <div className="border border-primary/10 overflow-hidden mb-5">
+                        <img src={post.imageUrl} alt="" className="w-full object-cover max-h-[360px]" />
+                    </div>
+                )}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-6">
+                        <button onClick={toggleHeart} className="flex items-center space-x-2 group/btn">
+                            <Heart className={`h-4 w-4 transition-all ${hearted ? "text-primary fill-primary scale-110" : "text-muted-foreground group-hover/btn:text-primary"}`} />
+                            <span className="text-xs font-mono text-muted-foreground group-hover/btn:text-primary transition-colors">
+                                {post._count.likes > 0 ? post._count.likes : ""}
+                            </span>
+                        </button>
+                        <button onClick={() => setShowComments((s) => !s)} className="flex items-center space-x-2 group/btn">
+                            <MessageCircle className="h-4 w-4 text-muted-foreground group-hover/btn:text-primary transition-colors" />
+                            <span className="text-xs font-mono text-muted-foreground group-hover/btn:text-primary transition-colors">
+                                {post._count.comments > 0 ? post._count.comments : ""}
+                            </span>
+                        </button>
+                    </div>
+                    <button onClick={toggleBookmark} className="group/btn">
+                        <Bookmark className={`h-4 w-4 transition-all ${bookmarked ? "text-primary fill-primary" : "text-muted-foreground group-hover/btn:text-primary"}`} />
+                    </button>
+                </div>
+                {showComments && (
+                    <div className="mt-5 space-y-3 border-t border-primary/10 pt-4">
+                        {localComments.map((c) => (
+                            <div key={c.id} className="flex items-start space-x-3">
+                                <Avatar className="h-6 w-6 border border-border/30 shrink-0">
+                                    <AvatarImage src={c.author.image ?? ""} />
+                                    <AvatarFallback className="text-[9px] bg-muted">{c.author.username[0].toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                    <span className="text-xs font-light tracking-[0.05em] text-primary mr-2">{c.author.username}</span>
+                                    <span className="text-xs font-light text-foreground/80">{c.content}</span>
+                                </div>
+                            </div>
+                        ))}
+                        <div className="flex items-center space-x-3 mt-3">
+                            <div className="w-6 h-px bg-primary/40 shrink-0" />
+                            <input
+                                type="text"
+                                placeholder="Add a comment…"
+                                className="flex-1 bg-transparent text-xs font-light text-foreground placeholder:text-muted-foreground/50 outline-none border-b border-primary/20 pb-1 focus:border-primary/60 transition-colors"
+                                value={commentText}
+                                onChange={(e) => setCommentText(e.target.value)}
+                                onKeyDown={(e) => e.key === "Enter" && submitComment()}
+                            />
+                            {commentText.trim() && (
+                                <button onClick={submitComment} disabled={submitting} className="text-primary disabled:opacity-50">
+                                    {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </article>
+    );
+}
 
-      {showScrollTop && (
-        <button
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="fixed bottom-8 right-8 z-50 bg-primary text-primary-foreground p-3 rounded-full shadow-lg hover:bg-primary/90 transition-all duration-200 hover:scale-105"
-          aria-label="Scroll to top"
+
+
+// ─── News Card (RSS) ──────────────────────────────────────────────────────────
+function NewsCard({ item, index }: { item: RssItem; index: number }) {
+    const categoryColor: Record<string, string> = {
+        ai: "text-emerald-500 border-emerald-500/30",
+        coding: "text-primary border-primary/30",
+        design: "text-pink-500 border-pink-500/30",
+        news: "text-amber-500 border-amber-500/30",
+        devops: "text-cyan-500 border-cyan-500/30",
+    };
+
+    return (
+        <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block border-t border-primary/10 py-6 group relative hover:bg-primary/[0.02] transition-colors -mx-2 px-2"
         >
-          <ArrowUp className="h-5 w-5" />
-        </button>
-      )}
-    </div>
-  );
+            {/* Index number */}
+            <div className="absolute top-6 right-2 text-xs font-mono text-muted-foreground/15 select-none">
+                {String(index + 1).padStart(2, "0")}
+            </div>
+
+            <div className="flex items-start gap-4">
+                {/* Source badge column */}
+                <div className="shrink-0 mt-0.5">
+                    <div
+                        className="w-8 h-8 flex items-center justify-center text-sm border border-border/20"
+                        style={{ backgroundColor: item.sourceColor + "18" }}
+                    >
+                        {item.sourceEmoji}
+                    </div>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                    {/* Source + category + time */}
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <span className="text-[10px] font-light text-muted-foreground/60 uppercase tracking-[0.12em]">
+                            {item.sourceName}
+                        </span>
+                        <div className="w-px h-3 bg-border/40" />
+                        <Badge
+                            variant="outline"
+                            className={`text-[9px] font-light uppercase tracking-[0.1em] px-1.5 py-0 h-4 ${categoryColor[item.category] || "text-primary border-primary/30"}`}
+                        >
+                            {item.category}
+                        </Badge>
+                        <div className="w-px h-3 bg-border/40" />
+                        <span className="text-[10px] font-mono text-muted-foreground/40">{timeAgo(item.publishedAt)}</span>
+                    </div>
+
+                    {/* Title */}
+                    <h3 className="text-sm font-light leading-snug mb-2 group-hover:text-primary transition-colors story-text line-clamp-2 pr-6">
+                        {item.title}
+                    </h3>
+
+                    {/* Summary */}
+                    {item.summary && (
+                        <p className="text-xs font-light text-muted-foreground/60 story-text line-clamp-2 leading-relaxed">
+                            {item.summary}
+                        </p>
+                    )}
+
+                    {/* Tags */}
+                    <div className="flex items-center gap-2 mt-3">
+                        {item.tags.slice(0, 3).map((tag) => (
+                            <span key={tag} className="text-[10px] font-mono text-muted-foreground/40">
+                                #{tag}
+                            </span>
+                        ))}
+                        <ExternalLink className="h-3 w-3 text-muted-foreground/20 group-hover:text-primary ml-auto transition-colors" />
+                    </div>
+                </div>
+
+                {/* Thumbnail */}
+                {item.imageUrl && (
+                    <div className="shrink-0 w-16 h-16 border border-primary/10 overflow-hidden hidden sm:block">
+                        <img
+                            src={item.imageUrl}
+                            alt=""
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                    </div>
+                )}
+            </div>
+        </a>
+    );
+}
+
+// ─── Infinite News Feed ───────────────────────────────────────────────────────
+const CATEGORIES = [
+    { id: "all", label: "All", icon: <Globe className="h-3 w-3" /> },
+    { id: "ai", label: "AI", icon: <Cpu className="h-3 w-3" /> },
+    { id: "coding", label: "Coding", icon: <Code2 className="h-3 w-3" /> },
+    { id: "news", label: "News", icon: <Zap className="h-3 w-3" /> },
+    { id: "design", label: "Design", icon: <Layers className="h-3 w-3" /> },
+];
+
+function InfiniteNewsFeed() {
+    const [category, setCategory] = useState("all");
+    const [page, setPage] = useState(1);
+    const [items, setItems] = useState<RssItem[]>([]);
+    const [hasMore, setHasMore] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const bottomRef = useRef<HTMLDivElement>(null);
+    const LIMIT = 12;
+
+    const loadingRef = useRef(false);
+
+    const fetchNews = useCallback(async (pg: number, cat: string, reset = false) => {
+        if (loadingRef.current) return;
+        loadingRef.current = true;
+        setLoading(true);
+        try {
+            const url = `/api/feed/rss?limit=${LIMIT}&page=${pg}&category=${cat}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            setItems((prev) => reset ? data.items : [...prev, ...data.items]);
+            setHasMore(data.hasMore);
+        } catch {
+            //
+        } finally {
+            loadingRef.current = false;
+            setLoading(false);
+            setInitialLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
+
+    // Initial load
+    useEffect(() => {
+        setInitialLoading(true);
+        setItems([]);
+        setPage(1);
+        setHasMore(true);
+        fetchNews(1, category, true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [category]);
+
+    // Infinite scroll observer
+    useEffect(() => {
+        const el = bottomRef.current;
+        if (!el) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasMore && !loading) {
+                    const nextPage = page + 1;
+                    setPage(nextPage);
+                    fetchNews(nextPage, category);
+                }
+            },
+            { threshold: 0.1, rootMargin: "200px" }
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [hasMore, loading, page, category, fetchNews]);
+
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        setItems([]);
+        setPage(1);
+        setHasMore(true);
+        await fetchNews(1, category, true);
+    };
+
+    return (
+        <div>
+            {/* Section header */}
+            <div className="flex items-center justify-between mb-6 pt-8 border-t border-primary/10">
+                <div className="flex items-center space-x-4">
+                    <div className="w-8 h-px bg-primary" />
+                    <span className="text-xs font-light text-primary uppercase tracking-[0.2em]">
+                        Tech &amp; AI News
+                    </span>
+                </div>
+                <button
+                    onClick={handleRefresh}
+                    disabled={refreshing || loading}
+                    className="flex items-center space-x-1.5 text-[10px] font-light text-muted-foreground/40 hover:text-primary transition-colors uppercase tracking-[0.1em] disabled:opacity-30"
+                >
+                    <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+                    <span>Refresh</span>
+                </button>
+            </div>
+
+            {/* Category filter strip */}
+            <div className="flex items-center gap-1 mb-6 flex-wrap">
+                {CATEGORIES.map((cat) => (
+                    <button
+                        key={cat.id}
+                        onClick={() => setCategory(cat.id)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-light uppercase tracking-[0.12em] border transition-all ${category === cat.id
+                            ? "border-primary/60 text-primary bg-primary/8"
+                            : "border-border/30 text-muted-foreground/50 hover:border-primary/30 hover:text-foreground"
+                            }`}
+                    >
+                        {cat.icon}
+                        {cat.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* News items */}
+            {initialLoading ? (
+                <div className="space-y-0">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="border-t border-primary/10 py-6 flex gap-4">
+                            <div className="w-8 h-8 bg-muted/40 shrink-0 animate-pulse" />
+                            <div className="flex-1 space-y-2">
+                                <div className="h-2.5 w-32 bg-muted/40 rounded animate-pulse" />
+                                <div className="h-3.5 w-full bg-muted/30 rounded animate-pulse" />
+                                <div className="h-3.5 w-4/5 bg-muted/30 rounded animate-pulse" />
+                                <div className="h-3 w-3/5 bg-muted/20 rounded animate-pulse" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : items.length === 0 ? (
+                <div className="border-t border-primary/10 py-16 text-center">
+                    <div className="text-4xl font-extralight text-muted-foreground/10 mb-4 tracking-[-0.04em]">NO FEED</div>
+                    <p className="text-xs font-light text-muted-foreground/40">Could not load news. Try refreshing.</p>
+                </div>
+            ) : (
+                <div>
+                    {items.map((item, i) => (
+                        <NewsCard key={item.id} item={item} index={i} />
+                    ))}
+                </div>
+            )}
+
+            {/* Infinite scroll sentinel */}
+            <div ref={bottomRef} className="py-4 flex items-center justify-center">
+                {loading && !initialLoading && (
+                    <div className="flex items-center space-x-3 text-xs font-light text-muted-foreground/40 uppercase tracking-[0.15em]">
+                        <Loader2 className="h-3 w-3 animate-spin text-primary/50" />
+                        <span>Loading more…</span>
+                    </div>
+                )}
+                {!hasMore && !loading && items.length > 0 && (
+                    <div className="flex items-center space-x-4 w-full">
+                        <div className="flex-1 h-px bg-primary/10" />
+                        <span className="text-[10px] font-mono text-muted-foreground/30 uppercase tracking-[0.15em]">End of feed</span>
+                        <div className="flex-1 h-px bg-primary/10" />
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ─── Suggested User Row ───────────────────────────────────────────────────────
+function SuggestedRow({ user }: { user: User }) {
+    const [following, setFollowing] = useState(!!user.isFollowing);
+    const toggle = async () => {
+        const was = following;
+        setFollowing(!was);
+        try {
+            if (was) await api.unfollowUser(user.username);
+            else await api.followUser(user.username);
+        } catch { setFollowing(was); }
+    };
+    return (
+        <div className="flex items-center justify-between py-3 border-b border-primary/10 group">
+            <div className="flex items-center space-x-3 min-w-0">
+                <div className="w-4 h-px bg-primary/30 shrink-0" />
+                <Link href={`/profile/${user.username}`}>
+                    <Avatar className="h-7 w-7 border border-primary/15">
+                        <AvatarImage src={user.image ?? ""} />
+                        <AvatarFallback className="text-[10px] font-light bg-primary/10 text-primary">
+                            {(user.name ?? user.username)[0].toUpperCase()}
+                        </AvatarFallback>
+                    </Avatar>
+                </Link>
+                <div className="min-w-0">
+                    <Link href={`/profile/${user.username}`}>
+                        <p className="text-xs font-light tracking-[0.05em] uppercase truncate hover:text-primary transition-colors">{user.username}</p>
+                    </Link>
+                    {user.bio && <p className="text-[10px] text-muted-foreground/50 font-light truncate mt-0.5">{user.bio}</p>}
+                </div>
+            </div>
+            <button onClick={toggle} className="ml-3 shrink-0">
+                {following ? (
+                    <span className="text-[10px] font-light uppercase tracking-[0.1em] text-muted-foreground/50 hover:text-destructive transition-colors">Unfollow</span>
+                ) : (
+                    <UserPlus className="h-3.5 w-3.5 text-primary/50 hover:text-primary transition-colors" />
+                )}
+            </button>
+        </div>
+    );
+}
+
+// ─── Connect Row ──────────────────────────────────────────────────────────────
+function ConnectRow({ user }: { user: User }) {
+    const [following, setFollowing] = useState(!!user.isFollowing);
+    const toggle = async () => {
+        const was = following;
+        setFollowing(!was);
+        try {
+            if (was) await api.unfollowUser(user.username);
+            else await api.followUser(user.username);
+        } catch { setFollowing(was); }
+    };
+    return (
+        <div className="flex items-center gap-2 py-2.5 border-b border-primary/8 group hover:bg-primary/[0.02] transition-colors -mx-1 px-1 rounded">
+            {/* Avatar → profile */}
+            <Link href={`/profile/${user.username}`} className="shrink-0">
+                <Avatar className="h-8 w-8 border border-primary/15 group-hover:border-primary/30 transition-colors">
+                    <AvatarImage src={user.image ?? ""} />
+                    <AvatarFallback className="text-[10px] font-light bg-primary/10 text-primary">
+                        {(user.name ?? user.username)[0].toUpperCase()}
+                    </AvatarFallback>
+                </Avatar>
+            </Link>
+
+            {/* Name + bio → profile posts */}
+            <Link href={`/profile/${user.username}`} className="flex-1 min-w-0">
+                <p className="text-[11px] font-light tracking-[0.06em] uppercase truncate group-hover:text-primary transition-colors leading-tight">
+                    {user.username}
+                </p>
+                {user.bio && (
+                    <p className="text-[9px] text-muted-foreground/40 font-light truncate mt-0.5 leading-tight">
+                        {user.bio}
+                    </p>
+                )}
+            </Link>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 shrink-0">
+                {/* Chat button */}
+                <Link
+                    href={`/messages?user=${user.username}`}
+                    className="text-muted-foreground/30 hover:text-primary transition-colors"
+                    title={`Message ${user.username}`}
+                >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                </Link>
+
+                {/* Follow / Unfollow */}
+                <button onClick={toggle} title={following ? "Unfollow" : "Follow"}>
+                    {following ? (
+                        <span className="text-[9px] font-light uppercase tracking-[0.1em] text-muted-foreground/40 hover:text-destructive transition-colors">
+                            ✓
+                        </span>
+                    ) : (
+                        <UserPlus className="h-3.5 w-3.5 text-primary/40 hover:text-primary transition-colors" />
+                    )}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ─── Home Page ────────────────────────────────────────────────────────────────
+export default function HomePage() {
+    const { data: feedData, loading: feedLoading } = useApi(() => api.getFeed({ page: 1, limit: 15 }), []);
+    const { data: suggestedData } = useApi(() => api.getSuggestedUsers(8), []);
+    const { data: meData } = useApi(() => api.getCurrentUser(), []);
+
+    const feed = feedData?.posts ?? [];
+    const suggested = suggestedData?.users ?? [];
+    const currentUser = meData?.user ?? null;
+
+    return (
+        <div className="min-h-screen bg-background">
+            <Navbar currentPage="home" />
+
+            <div className="pt-16 relative">
+                <GridBackground />
+
+                <div className="max-w-7xl mx-auto px-8 relative z-10">
+
+                    {/* Main grid */}
+                    <div className="grid lg:grid-cols-12 gap-16 mt-0">
+
+                        {/* Feed column — 8 cols */}
+                        <div className="lg:col-span-8">
+
+                            {/* ─── Infinite news feed (top) ─────────────────── */}
+                            <InfiniteNewsFeed />
+
+                            {/* User posts */}
+                            {feedLoading ? (
+                                <div>
+                                    {Array.from({ length: 3 }).map((_, i) => (
+                                        <div key={i} className="border-t border-primary/10 py-8">
+                                            <div className="flex items-center space-x-4 mb-5">
+                                                <div className="w-6 h-px bg-primary/20" />
+                                                <div className="h-8 w-8 rounded-full bg-muted/50 animate-pulse" />
+                                                <div className="space-y-1.5">
+                                                    <div className="h-2.5 w-24 bg-muted/50 rounded animate-pulse" />
+                                                    <div className="h-2 w-14 bg-muted/30 rounded animate-pulse" />
+                                                </div>
+                                            </div>
+                                            <div className="pl-[calc(1.5rem+2rem+0.75rem)] space-y-3">
+                                                <div className="h-3 w-full bg-muted/40 rounded animate-pulse" />
+                                                <div className="h-3 w-4/5 bg-muted/40 rounded animate-pulse" />
+                                                <div className="h-3 w-3/5 bg-muted/30 rounded animate-pulse" />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : feed.length > 0 ? (
+                                <div>
+                                    {feed.map((post, i) => <PostCard key={post.id} post={post} index={i} />)}
+                                </div>
+                            ) : null}
+                        </div>
+
+                        {/* Sidebar — 4 cols */}
+                        <div className="hidden lg:block lg:col-span-4 border-l border-primary/10 pl-8">
+                            <div className="sticky top-16 space-y-5">
+
+                                {/* Profile */}
+                                {currentUser && (
+                                    <div>
+                                        <div className="flex items-center space-x-3 mb-6">
+                                            <div className="w-6 h-px bg-primary/60" />
+                                            <span className="text-[10px] font-light text-primary uppercase tracking-[0.2em]">You</span>
+                                        </div>
+                                        <Link href={`/profile/${currentUser.username}`} className="flex items-center space-x-4 group">
+                                            <Avatar className="h-10 w-10 border border-primary/20">
+                                                <AvatarImage src={currentUser.image ?? ""} />
+                                                <AvatarFallback className="text-sm font-light bg-primary/10 text-primary">
+                                                    {(currentUser.name ?? currentUser.username)[0].toUpperCase()}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-light tracking-[0.08em] uppercase group-hover:text-primary transition-colors truncate">{currentUser.username}</p>
+                                                {currentUser.name && <p className="text-[11px] font-light text-muted-foreground/50 truncate">{currentUser.name}</p>}
+                                            </div>
+                                            <ArrowRight className="h-3 w-3 text-muted-foreground/20 group-hover:text-primary transition-colors ml-auto shrink-0" />
+                                        </Link>
+                                        {currentUser._count && (
+                                            <div className="flex items-center space-x-6 mt-4 pl-[calc(2.5rem+1rem)]">
+                                                {[
+                                                    { val: currentUser._count.followers, label: "Followers" },
+                                                    { val: currentUser._count.following, label: "Following" },
+                                                    { val: currentUser._count.posts, label: "Posts" },
+                                                ].map((stat, i) => (
+                                                    <div key={stat.label} className="flex items-center space-x-6">
+                                                        {i > 0 && <div className="w-px h-6 bg-primary/10" />}
+                                                        <div>
+                                                            <p className="text-sm font-light font-mono">{stat.val}</p>
+                                                            <p className="text-[10px] font-light text-muted-foreground/40 uppercase tracking-[0.1em]">{stat.label}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="w-full h-px bg-primary/10" />
+
+                                {/* Suggested users */}
+                                {suggested.length > 0 && (
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center space-x-3">
+                                                <div className="w-6 h-px bg-primary/60" />
+                                                <span className="text-[10px] font-light text-primary uppercase tracking-[0.2em]">Who to Follow</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            {suggested.slice(0, 6).map((u) => <SuggestedRow key={u.id} user={u} />)}
+                                        </div>
+                                    </div>
+                                )}
+
+
+                                {/* Connect to People */}
+                                {suggested.length > 0 && (
+                                    <div>
+                                        <div className="flex items-center space-x-3 mb-4">
+                                            <div className="w-6 h-px bg-primary/60" />
+                                            <span className="text-[10px] font-light text-primary uppercase tracking-[0.2em]">Connect</span>
+                                        </div>
+                                        <div className="space-y-1">
+                                            {suggested.slice(0, 5).map((u) => (
+                                                <ConnectRow key={u.id} user={u} />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <p className="text-[10px] font-light text-muted-foreground/20 uppercase tracking-[0.1em]">© 2025 MERGE</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }

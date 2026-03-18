@@ -37,6 +37,7 @@ export interface Post {
   author: User;
   _count: { likes: number; comments: number };
   isLiked?: boolean;
+  isBookmarked?: boolean;
   comments?: Comment[];
 }
 
@@ -227,6 +228,23 @@ class ApiClient {
     return this.request<{ comment: Comment }>(`/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify({ content }) });
   }
 
+  async bookmarkPost(id: string) {
+    return this.request<{ bookmarked: boolean }>(`/posts/${id}/bookmark`, { method: 'POST' });
+  }
+
+  async unbookmarkPost(id: string) {
+    return this.request<{ bookmarked: boolean }>(`/posts/${id}/bookmark`, { method: 'DELETE' });
+  }
+
+  async getBookmarks(params?: { page?: number }) {
+    const q = new URLSearchParams(params as any).toString();
+    return this.request<{ posts: Post[]; page: number }>(`/bookmarks${q ? '?' + q : ''}`);
+  }
+
+  async reportPost(id: string, reason?: string) {
+    return this.request<{ message: string }>(`/posts/${id}/report`, { method: 'POST', body: JSON.stringify({ reason }) });
+  }
+
   // ─── Projects ───────────────────────────────────────────────────────────────
 
   async getProjects(params?: { page?: number; limit?: number; search?: string; language?: string; tag?: string; featured?: boolean }) {
@@ -273,6 +291,10 @@ class ApiClient {
     return this.request<{ users: User[] }>(`/users?search=${encodeURIComponent(search)}&limit=${limit}`);
   }
 
+  async getSuggestedUsers(limit = 10) {
+    return this.request<{ users: User[] }>(`/users/suggested?limit=${limit}`);
+  }
+
   async getUser(username: string) {
     return this.request<{ user: User }>(`/users/${username}`);
   }
@@ -307,7 +329,7 @@ class ApiClient {
 
   async getNotifications(params?: { unread?: boolean; page?: number }) {
     const q = new URLSearchParams(params as any).toString();
-    return this.request<{ notifications: Notification[]; unreadCount: number }>(`/notifications${q ? '?' + q : ''}`);
+    return this.request<{ notifications: Notification[]; unreadCount: number; unreadMessagesCount?: number }>(`/notifications${q ? '?' + q : ''}`);
   }
 
   async markNotificationRead(id: string) {

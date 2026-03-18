@@ -11,8 +11,9 @@ import {
   Minus
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { api } from "@/lib/api";
 
 interface NavbarProps {
   currentPage?: string;
@@ -21,6 +22,37 @@ interface NavbarProps {
 export function Navbar({ currentPage }: NavbarProps) {
   const [showMessages, setShowMessages] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
+  const [unreadGeneralCount, setUnreadGeneralCount] = useState(0);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+
+  // Global notification poller
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    const fetchCounts = async () => {
+      try {
+        const res = await api.getNotifications({ unread: true, page: 1 });
+        // Assume API returns unreadCount and unreadMessagesCount as we implemented
+        setUnreadGeneralCount(res.unreadCount || 0);
+        setUnreadMessagesCount(res.unreadMessagesCount || 0);
+      } catch (error) {
+        // Silently fail if API throws
+      }
+    };
+
+    if (isAuthenticated) {
+      fetchCounts(); // Initial fetch
+      
+      interval = setInterval(() => {
+        fetchCounts();
+      }, 5000); // Polling every 5 seconds globally
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isAuthenticated]);
+
   return (
     <header className="fixed top-0 w-full z-40 bg-background/80 backdrop-blur-sm border-b border-border/20">
       <div className="max-w-8xl mx-auto px-8 py-4">
@@ -64,17 +96,26 @@ export function Navbar({ currentPage }: NavbarProps) {
                   onClick={() => setShowMessages(!showMessages)}
                 >
                   <MessageCircle className="h-4 w-4" />
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></div>
+                  {unreadMessagesCount > 0 && (
+                    <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground border-2 border-background">
+                      {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
+                    </div>
+                  )}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="relative"
                   asChild
+                  onClick={() => setUnreadGeneralCount(0)} // Optimistic clear on click
                 >
                   <Link href="/notifications">
                     <Bell className="h-4 w-4" />
-                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></div>
+                    {unreadGeneralCount > 0 && (
+                      <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground border-2 border-background">
+                        {unreadGeneralCount > 9 ? '9+' : unreadGeneralCount}
+                      </div>
+                    )}
                   </Link>
                 </Button>
                 <Button variant="ghost" size="sm" asChild>

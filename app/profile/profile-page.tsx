@@ -32,6 +32,10 @@ import {
   Activity,
   FileText,
   GitBranch,
+  MessageSquare,
+  Clock,
+  Image as ImageIcon,
+  Bookmark,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
@@ -232,8 +236,8 @@ export default function ProfilePage() {
     githubStats: {
       publicRepos: githubStats.publicRepos,
       publicGists: githubStats.publicGists,
-      followers: githubStats.followers,
-      following: githubStats.following,
+      followers: user?._count?.followers || 0,
+      following: user?._count?.following || 0,
       contributions: githubStats.contributions,
       stars: githubStats.stars,
       totalForks: githubStats.totalForks,
@@ -249,7 +253,7 @@ export default function ProfilePage() {
     : "Unknown";
 
   // Calculate total stats
-  const totalProjects = projects.length;
+  const totalProjects = user?._count?.projects || 0;
   const totalStars = projects.reduce(
     (sum, project) => sum + (project.stars || 0),
     0,
@@ -318,17 +322,12 @@ export default function ProfilePage() {
                           variant="outline"
                           size="sm"
                           className="rounded-full"
+                          asChild
                         >
-                          <MessageCircle className="mr-2 h-4 w-4" />
-                          Message
-                        </Button>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="rounded-full"
-                        >
-                          <UserPlus className="mr-2 h-4 w-4" />
-                          Follow
+                          <Link href="/settings">
+                            <Settings className="mr-2 h-4 w-4" />
+                            Edit Profile
+                          </Link>
                         </Button>
                       </div>
                     </div>
@@ -368,7 +367,7 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Stats Bar - Integrated GitHub and Social Stats */}
-                <div className="mt-6 grid grid-cols-2 md:grid-cols-6 gap-4">
+                <div className="mt-6 grid grid-cols-2 md:grid-cols-6 gap-4 border-t border-border/30 pt-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-primary">
                       {totalProjects}
@@ -387,7 +386,7 @@ export default function ProfilePage() {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-primary">
-                      {profileData.githubStats.publicRepos}
+                      {githubStatsLoading ? '-' : (profileData.githubStats.publicRepos || '-')}
                     </div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">
                       Repos
@@ -395,8 +394,7 @@ export default function ProfilePage() {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-secondary">
-                      {profileData.githubStats.contributions?.toLocaleString() ||
-                        0}
+                      {githubStatsLoading ? '-' : (profileData.githubStats.contributions?.toLocaleString() || '-')}
                     </div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">
                       Contribs
@@ -440,9 +438,16 @@ export default function ProfilePage() {
 
       {/* Content Tabs */}
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <Tabs defaultValue="projects" className="space-y-6">
+        <Tabs defaultValue="posts" className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <TabsList className="grid w-full sm:w-auto grid-cols-3 h-auto p-1 bg-muted/50">
+            <TabsList className="grid w-full sm:w-auto grid-cols-4 h-auto p-1 bg-muted/50">
+              <TabsTrigger
+                value="posts"
+                className="data-[state=active]:bg-background data-[state=active]:text-foreground rounded-lg px-4 py-2 text-sm font-medium"
+              >
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Posts
+              </TabsTrigger>
               <TabsTrigger
                 value="projects"
                 className="data-[state=active]:bg-background data-[state=active]:text-foreground rounded-lg px-4 py-2 text-sm font-medium"
@@ -482,6 +487,113 @@ export default function ProfilePage() {
               </Button>
             </div>
           </div>
+
+          {/* ── POSTS TAB ── */}
+          <TabsContent value="posts" className="space-y-0">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold">My Posts</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">{totalPosts} posts shared</p>
+              </div>
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              <div className="rounded-xl p-3 bg-gradient-to-br from-pink-500/10 to-pink-600/10 border border-pink-500/20 text-center">
+                <p className="text-xl font-bold text-pink-600">{totalLikes}</p>
+                <p className="text-xs text-muted-foreground">Total Likes</p>
+              </div>
+              <div className="rounded-xl p-3 bg-gradient-to-br from-violet-500/10 to-violet-600/10 border border-violet-500/20 text-center">
+                <p className="text-xl font-bold text-violet-600">{totalComments}</p>
+                <p className="text-xs text-muted-foreground">Comments</p>
+              </div>
+              <div className="rounded-xl p-3 bg-gradient-to-br from-blue-500/10 to-blue-600/10 border border-blue-500/20 text-center">
+                <p className="text-xl font-bold text-blue-600">{totalPosts}</p>
+                <p className="text-xs text-muted-foreground">Posts</p>
+              </div>
+            </div>
+
+            {/* Posts list */}
+            {insightsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl border border-border/20 bg-card p-4 animate-pulse">
+                    <div className="flex gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-full bg-muted flex-shrink-0" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3 bg-muted rounded w-28" />
+                        <div className="h-2.5 bg-muted rounded w-16" />
+                      </div>
+                    </div>
+                    <div className="h-3 bg-muted rounded w-full mb-1.5" />
+                    <div className="h-3 bg-muted rounded w-4/5" />
+                  </div>
+                ))}
+              </div>
+            ) : insights.length === 0 ? (
+              <div className="rounded-2xl border border-border/20 bg-card py-16 text-center">
+                <MessageSquare className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+                <p className="font-semibold mb-1">No posts yet</p>
+                <p className="text-sm text-muted-foreground">Share your thoughts with the community!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {insights.map((post) => (
+                  <div key={post.id} className="rounded-2xl border border-border/20 bg-card overflow-hidden hover:border-border/40 transition-colors">
+                    {/* Post header */}
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <Avatar className="h-9 w-9 flex-shrink-0">
+                        <AvatarImage src={user?.image || ""} />
+                        <AvatarFallback className="text-xs font-semibold">
+                          {user?.name?.[0] || user?.username?.[0] || "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold leading-none">{user?.name}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                          @{user?.username}
+                          <span className="text-muted-foreground/40">·</span>
+                          <Clock className="h-2.5 w-2.5" />
+                          {post.publishedAt}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Post content */}
+                    <div className="px-4 pb-3">
+                      <p className="text-sm text-foreground/90 leading-relaxed">{post.excerpt}</p>
+                      {/* Tags */}
+                      {post.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {post.tags.slice(0, 5).map((tag) => (
+                            <span key={tag} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action bar */}
+                    <div className="flex items-center gap-1 px-3 py-2 border-t border-border/10">
+                      <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-red-400 text-xs">
+                        <Heart className="h-4 w-4" />
+                        <span>{post.likes}</span>
+                      </button>
+                      <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground text-xs">
+                        <MessageCircle className="h-4 w-4" />
+                        <span>{post.comments}</span>
+                      </button>
+                      <div className="flex-1" />
+                      <button className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-primary">
+                        <Bookmark className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
 
           <TabsContent value="projects" className="space-y-6">
             <div className="flex items-center justify-between mb-6">
@@ -877,6 +989,6 @@ export default function ProfilePage() {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+    </div >
   );
 }

@@ -105,7 +105,7 @@
   --font-sans: Open Sans, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
-  --shadow-color: rgba(29,161,242,0.15);
+  --shadow-color: rgba(29, 161, 242, 0.15);
   --shadow-opacity: 0;
   --shadow-blur: 0px;
   --shadow-spread: 0px;
@@ -161,7 +161,7 @@
   --font-sans: Open Sans, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
-  --shadow-color: rgba(29,161,242,0.25);
+  --shadow-color: rgba(29, 161, 242, 0.25);
   --shadow-opacity: 0;
   --shadow-blur: 0px;
   --shadow-spread: 0px;
@@ -183,6 +183,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
@@ -229,6 +230,48 @@
     box-shadow: 0 2px 8px 0 oklch(0 0 0 / 0.1);
   }
 
+  /* ── Instagram-style utilities ───────────────────────────────── */
+  .ig-card {
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ig-story-ring {
+    background: linear-gradient(45deg,
+        oklch(0.75 0.22 20),
+        oklch(0.75 0.20 320),
+        oklch(0.80 0.18 50));
+  }
+
+  .ig-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    transition: transform 0.1s ease;
+  }
+
+  .ig-action-btn:active {
+    transform: scale(0.85);
+  }
+
+  .ig-heart-anim {
+    animation: ig-heart-bounce 0.5s ease;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   .fade-in {
     animation: fadeIn 1.2s ease-out;
   }
@@ -261,6 +304,7 @@
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -272,6 +316,7 @@
     opacity: 0;
     transform: translateY(40px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -282,13 +327,41 @@
   0% {
     transform: translate(0, 0);
   }
+
   100% {
     transform: translate(100px, 100px);
   }
 }
 
+@keyframes ig-heart-bounce {
+  0% {
+    transform: scale(1);
+  }
+
+  30% {
+    transform: scale(1.35);
+  }
+
+  60% {
+    transform: scale(0.9);
+  }
+
+  80% {
+    transform: scale(1.15);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
 /* Typography refinements */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-feature-settings: "rlig" 1, "calt" 1;
   letter-spacing: -0.025em;
 }

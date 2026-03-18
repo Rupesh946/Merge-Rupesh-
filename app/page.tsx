@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import FaultyTerminal from '@/components/FaultyTerminal';
+import { HeaderAuthButtons, HeroAuthButtons, CtaAuthButtons } from "@/components/landing-auth-buttons";
 
 export default function LandingPage() {
   return (
@@ -40,14 +40,7 @@ export default function LandingPage() {
                 Community
               </Link>
             </nav>
-            <div className="flex items-center space-x-6">
-              <Button variant="ghost" size="sm" className="font-light text-xs uppercase tracking-[0.1em]" asChild>
-                <Link href="/auth/signin">Enter</Link>
-              </Button>
-              <Button size="sm" className="font-light bg-primary text-primary-foreground hover:bg-primary/90 text-xs uppercase tracking-[0.1em] px-6" asChild>
-                <Link href="/auth/signin">Begin</Link>
-              </Button>
-            </div>
+            <HeaderAuthButtons />
           </div>
         </div>
       </header>
@@ -119,20 +112,7 @@ export default function LandingPage() {
                   and meaningful work. Show your craft, share your insights, connect with peers.
                 </p>
 
-                <div className="flex items-center space-x-6">
-                  <Button size="lg" className="font-light bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-3 h-auto text-sm uppercase tracking-[0.1em]" asChild>
-                    <Link href="/auth/signin">
-                      <Code2 className="mr-3 h-4 w-4" />
-                      Enter
-                    </Link>
-                  </Button>
-                  <Button variant="ghost" size="lg" className="font-light px-0 py-6 h-auto text-sm uppercase tracking-[0.1em] hover:bg-transparent hover:text-primary" asChild>
-                    <Link href="#work" className="flex items-center space-x-3">
-                      <span>Explore Work</span>
-                      <ArrowRight className="h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
+                <HeroAuthButtons />
               </div>
             </div>
 
@@ -424,18 +404,7 @@ export default function LandingPage() {
                 thoughtful code, elegant design, and meaningful work.
               </p>
 
-              <div className="flex items-center space-x-8">
-                <Button size="lg" className="font-light bg-foreground text-background hover:bg-foreground/90 px-8 py-6 h-auto text-sm uppercase tracking-[0.1em]" asChild>
-                  <Link href="/auth/signin">
-                    <Github className="mr-3 h-4 w-4" />
-                    Enter Space
-                  </Link>
-                </Button>
-                <div className="text-xs font-light text-muted-foreground">
-                  <div>For those who craft code</div>
-                  <div>Always free</div>
-                </div>
-              </div>
+              <CtaAuthButtons />
             </div>
 
             <div className="lg:col-span-5">
