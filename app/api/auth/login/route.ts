@@ -26,7 +26,13 @@ export async function POST(req: Request) {
             );
         }
 
-        // Verify password
+        // Verify password — user.password is null for OAuth-only accounts
+        if (!user.password) {
+            return NextResponse.json(
+                { message: 'Invalid credentials' },
+                { status: 401 }
+            );
+        }
         const isValid = await bcrypt.compare(password, user.password);
 
         if (!isValid) {
