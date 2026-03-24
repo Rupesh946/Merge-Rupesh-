@@ -30,9 +30,11 @@ export function Navbar({ currentPage }: NavbarProps) {
     let interval: NodeJS.Timeout;
     
     const fetchCounts = async () => {
+      // Don't poll if the tab is in the background
+      if (document.hidden) return;
+      
       try {
         const res = await api.getNotifications({ unread: true, page: 1 });
-        // Assume API returns unreadCount and unreadMessagesCount as we implemented
         setUnreadGeneralCount(res.unreadCount || 0);
         setUnreadMessagesCount(res.unreadMessagesCount || 0);
       } catch (error) {
@@ -45,7 +47,18 @@ export function Navbar({ currentPage }: NavbarProps) {
       
       interval = setInterval(() => {
         fetchCounts();
-      }, 5000); // Polling every 5 seconds globally
+      }, 60000); // Polling every 60 seconds (reduced from 5s to prevent DB connection exhaustion)
+      
+      // Also fetch when tab becomes visible again
+      const handleVisibilityChange = () => {
+        if (!document.hidden) fetchCounts();
+      };
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      
+      return () => {
+        if (interval) clearInterval(interval);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      };
     }
 
     return () => {
