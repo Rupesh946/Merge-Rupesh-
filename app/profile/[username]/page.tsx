@@ -86,6 +86,12 @@ interface User {
   website?: string;
   githubUsername?: string;
   createdAt: string;
+  _count?: {
+    followers: number;
+    following: number;
+    projects: number;
+    posts: number;
+  };
 }
 
 export default function UserProfilePage() {
@@ -111,6 +117,10 @@ export default function UserProfilePage() {
   const [githubStatsLoading, setGithubStatsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
+  // Interaction State
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
+
   // Fetch user profile data
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -134,37 +144,36 @@ export default function UserProfilePage() {
 
         // Fetch user profile by username
         const userResponse = await api.getUser(profileUsername);
-        console.log("User response:", userResponse); // Add debug log
-
-        // Note: The API response format might be different - it could be { user: ... } or just the user object
-        const userObject = userResponse.user || userResponse;
+        const userObject = userResponse.user;
         setUserProfile(userObject);
+        setIsFollowing(!!userObject.isFollowing);
 
-        // Fetch user projects
+        // Fetch user projects — server-side author filter
         setProjectsLoading(true);
-        const projectsResponse = await api.getProjects({ limit: 10, author: profileUsername });
+        const projectsResponse = await api.getProjects({ limit: 20, author: profileUsername } as any);
         setProjects(projectsResponse.projects || []);
 
-        // Fetch user insights/blogs
+        // Fetch user posts (shown in Insights tab)
         setInsightsLoading(true);
-        const insightsResponse = await api.getBlogPosts({ limit: 10, author: profileUsername });
-        // Transform BlogPost to Insight
-        const transformedInsights = (insightsResponse.posts || []).map(
-          (post) => ({
-            id: post.id,
-            title: post.title,
-            excerpt: post.excerpt || post.content.substring(0, 100) + "...",
-            publishedAt: post.createdAt,
-            readTime: post.readTime ? `${post.readTime} min read` : "N/A",
-            likes: post._count?.likes || 0,
-            comments: post._count?.comments || 0,
-            tags: post.tags || [],
-            content: post.content,
-            author: post.author,
-            _count: post._count,
-            isLiked: post.isLiked,
-          }),
+        const postsResponse = await api.getPosts({ limit: 50 });
+        const userPosts = (postsResponse.posts || []).filter(
+          (p) => p.author?.username === profileUsername
         );
+        // Transform Post to Insight format
+        const transformedInsights = userPosts.map((post) => ({
+          id: post.id,
+          title: post.content.substring(0, 80) + (post.content.length > 80 ? '…' : ''),
+          excerpt: post.content,
+          publishedAt: new Date(post.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+          readTime: '',
+          likes: post._count?.likes || 0,
+          comments: post._count?.comments || 0,
+          tags: post.tags || [],
+          content: post.content,
+          author: post.author,
+          _count: post._count,
+          isLiked: post.isLiked,
+        }));
         setInsights(transformedInsights);
 
         // For activity, we'll fetch notifications that might be relevant
@@ -177,7 +186,15 @@ export default function UserProfilePage() {
           setGithubStatsLoading(true);
           try {
             const stats = await api.getGitHubStats(userObject.githubUsername);
-            setGithubStats(stats);
+            setGithubStats({
+              publicRepos: stats.publicRepos,
+              publicGists: 0, // Default or fetch if available
+              followers: stats.followers,
+              following: stats.following,
+              contributions: stats.contributions,
+              stars: stats.stars,
+              totalForks: stats.totalForks,
+            });
           } catch (error) {
             console.error("Error fetching GitHub stats:", error);
             setGithubStats({
@@ -195,10 +212,10 @@ export default function UserProfilePage() {
         } else {
           setGithubStatsLoading(false);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching user profile:", error);
         // Check if it's a 404 error specifically
-        if (error.message.includes('404') || error.message.toLowerCase().includes('not found')) {
+        if (error.message && (error.message.includes('404') || error.message.toLowerCase().includes('not found'))) {
           // Show user not found page instead of generic 404
           router.push('/404');
         } else {
@@ -214,7 +231,48 @@ export default function UserProfilePage() {
     };
 
     fetchUserProfile();
-  }, [username, router]);
+  }, [username, router, isAuthenticated, currentUser]);
+
+  const handleFollowToggle = async () => {
+    if (!userProfile) return;
+    try {
+      setIsFollowLoading(true);
+      if (isFollowing) {
+        await api.unfollowUser(userProfile.username);
+        setIsFollowing(false);
+        setUserProfile(prev => prev ? {
+          ...prev,
+          _count: {
+            ...prev._count!,
+            followers: Math.max(0, (prev._count?.followers || 0) - 1)
+          }
+        } : prev);
+      } else {
+        await api.followUser(userProfile.username);
+        setIsFollowing(true);
+        setUserProfile(prev => prev ? {
+          ...prev,
+          _count: {
+            ...prev._count!,
+            followers: (prev._count?.followers || 0) + 1
+          }
+        } : prev);
+      }
+    } catch (error) {
+      console.error("Failed to toggle follow status:", error);
+    } finally {
+      setIsFollowLoading(false);
+    }
+  };
+
+  const handleMessage = async () => {
+    if (!userProfile) return;
+    // We can open the chat UI programmatically by navigating to the chat modal
+    // Either by pushing query params like `?chat=userId` or letting the user select it
+    // Assuming the navbar handles global chat state, or routing to a messages page:
+    // This is a placeholder since the app uses a global MessagesModal in Navbar
+    router.push(`/?messageUser=${userProfile.id}`);
+  };
 
   if (loading) {
     return (
@@ -251,16 +309,16 @@ export default function UserProfilePage() {
   const totalStars = projects.reduce((sum, project) => sum + (project.stars || 0), 0);
   const totalForks = projects.reduce((sum, project) => sum + (project.forks || 0), 0);
   const totalFeatured = projects.filter((p) => p.featured).length;
-  
+
   const totalPosts = insights.length;
   const totalLikes = insights.reduce((sum, insight) => sum + insight.likes, 0);
   const totalComments = insights.reduce((sum, insight) => sum + insight.comments, 0);
 
   const joinedDate = userProfile.createdAt
     ? new Date(userProfile.createdAt).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-      })
+      year: "numeric",
+      month: "long",
+    })
     : "Unknown";
 
   return (
@@ -271,7 +329,7 @@ export default function UserProfilePage() {
       <div className="relative pt-20 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-secondary/10"></div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent"></div>
-        
+
         <div className="relative max-w-6xl mx-auto px-4">
           {/* Profile Card */}
           <div className="bg-card/80 backdrop-blur-sm border border-border/50 rounded-2xl shadow-xl overflow-hidden">
@@ -301,27 +359,49 @@ export default function UserProfilePage() {
                           @{userProfile.username}
                         </p>
                       </div>
-                      
+
                       {/* Action Buttons - shown only for other users, not current user */}
-                      {isAuthenticated && currentUser?.username !== userProfile.username && (
+                      {isAuthenticated && currentUser?.id !== userProfile.id && (
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="rounded-full">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="rounded-full"
+                            onClick={handleMessage}
+                          >
                             <MessageCircle className="mr-2 h-4 w-4" />
                             Message
                           </Button>
-                          <Button variant="default" size="sm" className="rounded-full">
-                            <UserPlus className="mr-2 h-4 w-4" />
-                            Follow
+                          <Button 
+                            variant={isFollowing ? "outline" : "default"}
+                            size="sm" 
+                            className="rounded-full"
+                            onClick={handleFollowToggle}
+                            disabled={isFollowLoading}
+                          >
+                            {isFollowing ? (
+                              <>
+                                <UserMinus className="mr-2 h-4 w-4" />
+                                Unfollow
+                              </>
+                            ) : (
+                              <>
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                Follow
+                              </>
+                            )}
                           </Button>
                         </div>
                       )}
-                      
+
                       {/* Own profile actions */}
-                      {isAuthenticated && currentUser?.username === userProfile.username && (
+                      {isAuthenticated && currentUser?.id === userProfile.id && (
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="rounded-full">
-                            <Settings className="mr-2 h-4 w-4" />
-                            Edit Profile
+                          <Button variant="outline" size="sm" className="rounded-full" asChild>
+                            <Link href="/settings">
+                              <Settings className="mr-2 h-4 w-4" />
+                              Edit Profile
+                            </Link>
                           </Button>
                         </div>
                       )}
@@ -364,7 +444,7 @@ export default function UserProfilePage() {
                 {/* Stats Bar */}
                 <div className="mt-6 grid grid-cols-2 md:grid-cols-6 gap-4 pt-4 border-t border-border/30">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{totalProjects}</div>
+                    <div className="text-2xl font-bold text-primary">{userProfile._count?.projects || 0}</div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Projects</div>
                   </div>
                   <div className="text-center">
@@ -372,26 +452,30 @@ export default function UserProfilePage() {
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Stars</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{githubStats.publicRepos}</div>
+                    <div className="text-2xl font-bold text-primary">
+                      {githubStatsLoading ? '-' : (githubStats.publicRepos || '-')}
+                    </div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Repos</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-secondary">{githubStats.contributions?.toLocaleString() || 0}</div>
+                    <div className="text-2xl font-bold text-secondary">
+                      {githubStatsLoading ? '-' : (githubStats.contributions || '-')}
+                    </div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Contribs</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{githubStats.followers.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-primary">{userProfile._count?.followers || 0}</div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Followers</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-secondary">{githubStats.following.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-secondary">{userProfile._count?.following || 0}</div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Following</div>
                   </div>
                 </div>
 
                 {/* GitHub Link */}
                 <div className="mt-4 text-center pt-4 border-t border-border/30">
-                  <a 
+                  <a
                     href={`https://github.com/${userProfile.githubUsername || userProfile.username}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -411,22 +495,22 @@ export default function UserProfilePage() {
       <div className="max-w-6xl mx-auto px-4 py-8">
         <Tabs defaultValue="projects" className="space-y-6">
           <TabsList className="grid w-full sm:w-auto grid-cols-3 h-auto p-1 bg-muted/50">
-            <TabsTrigger 
-              value="projects" 
+            <TabsTrigger
+              value="projects"
               className="data-[state=active]:bg-background data-[state=active]:text-foreground rounded-lg px-4 py-2 text-sm font-medium"
             >
               <Code2 className="mr-2 h-4 w-4" />
               Projects
             </TabsTrigger>
-            <TabsTrigger 
-              value="insights" 
+            <TabsTrigger
+              value="insights"
               className="data-[state=active]:bg-background data-[state=active]:text-foreground rounded-lg px-4 py-2 text-sm font-medium"
             >
               <FileText className="mr-2 h-4 w-4" />
               Insights
             </TabsTrigger>
-            <TabsTrigger 
-              value="activity" 
+            <TabsTrigger
+              value="activity"
               className="data-[state=active]:bg-background data-[state=active]:text-foreground rounded-lg px-4 py-2 text-sm font-medium"
             >
               <Activity className="mr-2 h-4 w-4" />
@@ -586,7 +670,7 @@ export default function UserProfilePage() {
                   <Code2 className="mx-auto h-12 w-12 text-muted-foreground" />
                   <h3 className="mt-4 text-lg font-medium">No projects yet</h3>
                   <p className="mt-2 text-muted-foreground">
-                    {userProfile.username === currentUser?.username 
+                    {userProfile.username === currentUser?.username
                       ? "Get started by sharing your first project."
                       : `${userProfile.name} hasn't shared any projects yet.`
                     }
@@ -734,7 +818,7 @@ export default function UserProfilePage() {
                   <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
                   <h3 className="mt-4 text-lg font-medium">No insights yet</h3>
                   <p className="mt-2 text-muted-foreground">
-                    {userProfile.username === currentUser?.username 
+                    {userProfile.username === currentUser?.username
                       ? "Write your first blog post to share your knowledge."
                       : `${userProfile.name} hasn't published any insights yet.`
                     }
@@ -797,7 +881,7 @@ export default function UserProfilePage() {
                       <Activity className="mx-auto h-12 w-12 text-muted-foreground" />
                       <h3 className="mt-4 text-lg font-medium">No recent activity</h3>
                       <p className="mt-2 text-muted-foreground">
-                        {userProfile.username === currentUser?.username 
+                        {userProfile.username === currentUser?.username
                           ? "Your activity will appear here."
                           : `${userProfile.name} hasn't been active recently.`
                         }

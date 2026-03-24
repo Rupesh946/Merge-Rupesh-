@@ -33,7 +33,7 @@ export default function ProjectsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [githubCurrentPage, setGithubCurrentPage] = useState(1);
   const itemsPerPage = 12;
-  
+
   // Share project modal state
   const [showShareModal, setShowShareModal] = useState(false);
   const [projectName, setProjectName] = useState("");
@@ -44,7 +44,7 @@ export default function ProjectsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  
+
   // Repo picker state
   const [showRepoPicker, setShowRepoPicker] = useState(false);
   const [userRepos, setUserRepos] = useState<any[]>([]);
@@ -61,8 +61,9 @@ export default function ProjectsPage() {
   );
 
   const projects = projectsData?.projects || [];
-  const totalProjects = projectsData?.pagination?.total || 0;
-  const totalPages = Math.ceil(totalProjects / itemsPerPage) || 1;
+  // Derive hasMore from whether we got a full page of results
+  const hasMoreProjects = projects.length === itemsPerPage;
+  const totalPages = hasMoreProjects ? currentPage + 1 : currentPage;
 
   // GitHub projects hook
   const {
@@ -77,6 +78,7 @@ export default function ProjectsPage() {
     if (showGitHubProjects) {
       fetchGitHubProjects(
         itemsPerPage,
+        undefined,
         searchQuery,
         githubCurrentPage
       );
@@ -88,59 +90,50 @@ export default function ProjectsPage() {
   };
 
   const handleLikeProject = async (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    const wasLiked = !!project.isLiked;
+
+    // Optimistic update
+    setData(prevData => {
+      if (!prevData) return prevData;
+      return {
+        ...prevData,
+        projects: prevData.projects.map(p =>
+          p.id === projectId
+            ? { ...p, isLiked: !wasLiked, _count: { ...p._count, likes: wasLiked ? p._count.likes - 1 : p._count.likes + 1 } }
+            : p
+        ),
+      };
+    });
+
     try {
-      // Optimistic update
-      setData(prevData => {
-        if (!prevData) return prevData;
-        return {
-          ...prevData,
-          projects: prevData.projects.map(p => {
-            if (p.id === projectId) {
-              return {
-                ...p,
-                isLiked: !p.isLiked,
-                _count: {
-                  ...p._count,
-                  likes: p.isLiked ? p._count.likes - 1 : p._count.likes + 1,
-                },
-              };
-            }
-            return p;
-          }),
-        };
-      });
-      await api.likeProject(projectId);
+      if (wasLiked) await api.unlikeProject(projectId);
+      else await api.likeProject(projectId);
     } catch (err) {
       console.error("Failed to like project:", err);
-      // Revert on error
+      // Revert
       setData(prevData => {
         if (!prevData) return prevData;
         return {
           ...prevData,
-          projects: prevData.projects.map(p => {
-            if (p.id === projectId) {
-              return {
-                ...p,
-                isLiked: !p.isLiked,
-                _count: {
-                  ...p._count,
-                  likes: p.isLiked ? p._count.likes - 1 : p._count.likes + 1,
-                },
-              };
-            }
-            return p;
-          }),
+          projects: prevData.projects.map(p =>
+            p.id === projectId
+              ? { ...p, isLiked: wasLiked, _count: { ...p._count, likes: wasLiked ? p._count.likes + 1 : p._count.likes - 1 } }
+              : p
+          ),
         };
       });
     }
   };
 
-  // Function to fetch user's GitHub repositories
+  // Function to fetch user's GitHub repositories via backend proxy
   const fetchUserRepos = async () => {
     try {
       setLoadingRepos(true);
+      setSubmitError(null);
 
-      // First check if the user is logged in with a main auth token
+      // Use the app JWT — no need for a separate github_token in localStorage
       const authToken = typeof window !== 'undefined'
         ? localStorage.getItem('auth_token')
         : null;
@@ -151,47 +144,33 @@ export default function ProjectsPage() {
         return;
       }
 
-      // Check if there's a GitHub token stored specifically for GitHub API calls
-      const githubToken = typeof window !== 'undefined'
-        ? localStorage.getItem('github_token')
-        : null;
+      // Call our backend proxy which uses the stored githubAccessToken
+      const response = await fetch('/api/github/repos?sort=updated&per_page=50', {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
 
-      // If no separate GitHub token, the user may need to link their GitHub account
-      // via the backend API that manages the tokens
-      if (!githubToken) {
-        // Try to access the GitHub API directly with just the auth token
-        // This might work if the backend manages the GitHub token internally
-        // For now, let's provide a suggestion to the user
-        setSubmitError("GitHub account not linked. Please connect your GitHub account first.");
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          // GitHub not connected — prompt user to sign in with GitHub
+          setSubmitError(
+            "GitHub account not connected. Please sign in with GitHub to import your repositories."
+          );
+        } else {
+          setSubmitError(data.message || "Failed to fetch repositories.");
+        }
         setLoadingRepos(false);
         return;
       }
 
-      // Fetch user's repositories from GitHub API
-      const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=20', {
-        headers: {
-          'Authorization': `token ${githubToken}`,
-          'Accept': 'application/vnd.github.v3+json',
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          setSubmitError("Invalid GitHub token. Please reconnect your GitHub account.");
-          setLoadingRepos(false);
-          return;
-        } else {
-          throw new Error(`Failed to fetch repositories: ${response.status} ${response.statusText}`);
-        }
-      }
-
-      const repos = await response.json();
-      setUserRepos(repos);
+      setUserRepos(data.repos);
       setShowRepoPicker(true);
-      setSubmitError(null);
     } catch (error) {
       console.error("Error fetching user repositories:", error);
-      setSubmitError(error instanceof Error ? error.message : "Failed to fetch repositories. Please check your GitHub connection.");
+      setSubmitError(error instanceof Error ? error.message : "Failed to fetch repositories.");
     } finally {
       setLoadingRepos(false);
     }
@@ -203,7 +182,7 @@ export default function ProjectsPage() {
     setProjectName(repo.name);
     setProjectDescription(repo.description || "");
     setGithubUrl(repo.html_url);
-    
+
     // Set language as a tag if available
     if (repo.language) {
       setProjectTags(prev => {
@@ -214,7 +193,7 @@ export default function ProjectsPage() {
         return tags.join(', ');
       });
     }
-    
+
     setShowRepoPicker(false);
     setSubmitError(null);
   };
@@ -228,7 +207,7 @@ export default function ProjectsPage() {
 
     try {
       setSubmitError(null);
-      
+
       // Extract owner and repo name from URL
       let owner, repo;
       if (repoUrl.includes('github.com/')) {
@@ -247,7 +226,7 @@ export default function ProjectsPage() {
 
       // Fetch repository details from GitHub API
       const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
-      
+
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error("Repository not found. Please check the URL and try again.");
@@ -255,14 +234,14 @@ export default function ProjectsPage() {
           throw new Error(`Failed to fetch repository: ${response.status} ${response.statusText}`);
         }
       }
-      
+
       const repoData = await response.json();
-      
+
       // Extract relevant information
       setProjectName(repoData.name || "");
       setProjectDescription(repoData.description || "");
       setGithubUrl(repoData.html_url || repoUrl);
-      
+
       // Add language as a tag if available
       if (repoData.language) {
         setProjectTags(prev => {
@@ -273,12 +252,12 @@ export default function ProjectsPage() {
           return tags.join(', ');
         });
       }
-      
+
       // Add topics as tags if available
       if (repoData.topics && Array.isArray(repoData.topics)) {
         setProjectTags(prev => {
           const tags = prev ? prev.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
-          repoData.topics.forEach(topic => {
+          repoData.topics.forEach((topic: string) => {
             if (!tags.includes(topic) && topic) {
               tags.push(topic);
             }
@@ -295,15 +274,15 @@ export default function ProjectsPage() {
   // Function to submit the project
   const handleSubmitProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!projectName.trim() || !projectDescription.trim()) {
       setSubmitError("Project name and description are required");
       return;
     }
-    
+
     setSubmitting(true);
     setSubmitError(null);
-    
+
     try {
       // Prepare project data
       const projectData: Partial<Project> = {
@@ -313,15 +292,15 @@ export default function ProjectsPage() {
         githubUrl: githubUrl.trim() || undefined,
         tags: projectTags
           ? projectTags
-              .split(',')
-              .map(tag => tag.trim())
-              .filter(tag => tag.length > 0)
+            .split(',')
+            .map(tag => tag.trim())
+            .filter(tag => tag.length > 0)
           : [],
       };
-      
+
       // Call the API to create the project
       await api.createProject(projectData);
-      
+
       // On success, show success message
       setSubmitSuccess(true);
       setSubmitting(false);
@@ -353,7 +332,7 @@ export default function ProjectsPage() {
       'Kotlin': '#F18E33',
       'R': '#198CE7'
     };
-    
+
     return languageColors[language] || '#808080';
   };
 
@@ -375,8 +354,8 @@ export default function ProjectsPage() {
                       Discover amazing projects from the developer community
                     </p>
                   </div>
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     className="font-light bg-accent text-accent-foreground"
                     onClick={() => setShowShareModal(true)}
                   >
@@ -462,14 +441,16 @@ export default function ProjectsPage() {
                         <CardHeader className="pb-4">
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center space-x-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={project.owner.avatar_url || "/api/placeholder/40/40"} />
-                                <AvatarFallback className="text-xs">{project.owner.login[0]}</AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="text-sm font-light">{project.owner.login}</p>
-                                <p className="text-xs text-muted-foreground font-mono">@{project.owner.login}</p>
-                              </div>
+                              <a href={project.owner.html_url} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={project.owner.avatar_url || "/api/placeholder/40/40"} />
+                                  <AvatarFallback className="text-xs">{project.owner.login[0]}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-sm font-light">{project.owner.login}</p>
+                                  <p className="text-xs text-muted-foreground font-mono">@{project.owner.login}</p>
+                                </div>
+                              </a>
                             </div>
                             <div className="flex items-center space-x-3">
                               <Badge variant="outline" className="font-light border-primary/40 text-primary text-xs uppercase tracking-[0.1em]">
@@ -586,14 +567,16 @@ export default function ProjectsPage() {
                         <CardHeader className="pb-4">
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center space-x-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={project.author.image || "/api/placeholder/40/40"} />
-                                <AvatarFallback className="text-xs">{project.author.name[0]}</AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="text-sm font-light">{project.author.name}</p>
-                                <p className="text-xs text-muted-foreground font-mono">@{project.author.username}</p>
-                              </div>
+                              <Link href={`/profile/${project.author.username}`} className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={project.author.image || "/api/placeholder/40/40"} />
+                                  <AvatarFallback className="text-xs">{project.author.name[0]}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-sm font-light">{project.author.name}</p>
+                                  <p className="text-xs text-muted-foreground font-mono">@{project.author.username}</p>
+                                </div>
+                              </Link>
                             </div>
                             <div className="flex items-center space-x-3">
                               {project.featured && (
@@ -647,17 +630,17 @@ export default function ProjectsPage() {
                             </div>
 
                             <div className="flex items-center space-x-4 text-xs text-muted-foreground font-mono">
-                                <div className="flex items-center space-x-1">
-                                  <Star className="h-3 w-3" />
-                                  <span>{project.stars.toLocaleString()}</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                  <GitFork className="h-3 w-3" />
-                                  <span>{project.forks}</span>
-                                </div>
-                                <Badge variant="outline" className="font-light border-border/30 text-xs">
-                                  {project.language || 'N/A'}
-                                </Badge>
+                              <div className="flex items-center space-x-1">
+                                <Star className="h-3 w-3" />
+                                <span>{project.stars.toLocaleString()}</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <GitFork className="h-3 w-3" />
+                                <span>{project.forks}</span>
+                              </div>
+                              <Badge variant="outline" className="font-light border-border/30 text-xs">
+                                {project.language || 'N/A'}
+                              </Badge>
                             </div>
                           </div>
 
@@ -740,9 +723,9 @@ export default function ProjectsPage() {
                     </div>
                   </div>
                 )
-              ) : totalPages > 1 && (
+              ) : (currentPage > 1 || hasMoreProjects) && (
                 <div className="flex justify-center mt-12">
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-4">
                     <Button
                       variant="outline"
                       size="sm"
@@ -752,46 +735,12 @@ export default function ProjectsPage() {
                     >
                       Previous
                     </Button>
-
-                    <div className="flex items-center space-x-1">
-                      {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                        if (totalPages <= 5) return i + 1;
-
-                        if (currentPage <= 3) {
-                          if (i < 4) return i + 1;
-                          if (i === 4) return totalPages;
-                        } else if (currentPage >= totalPages - 2) {
-                          if (i === 0) return 1;
-                          if (i >= 1) return totalPages - 4 + i;
-                        } else {
-                          if (i === 0) return 1;
-                          if (i === 1) return currentPage - 1;
-                          if (i === 2) return currentPage;
-                          if (i === 3) return currentPage + 1;
-                          if (i === 4) return totalPages;
-                        }
-                      }).filter(page => page !== undefined).map(page => (
-                        <Button
-                          key={page}
-                          variant={currentPage === page ? 'secondary' : 'outline'}
-                          size="sm"
-                          onClick={() => setCurrentPage(page)}
-                          className={`w-8 h-8 p-0 font-light ${
-                            currentPage === page
-                              ? 'text-foreground bg-accent border-accent'
-                              : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          {page}
-                        </Button>
-                      ))}
-                    </div>
-
+                    <span className="text-sm text-muted-foreground font-light">Page {currentPage}</span>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(prev => prev + 1)}
+                      disabled={!hasMoreProjects}
                       className="font-light"
                     >
                       Next
@@ -839,7 +788,7 @@ export default function ProjectsPage() {
           </div>
         </div>
       </div>
-      
+
       {/* Share Project Modal */}
       {showShareModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -866,7 +815,7 @@ export default function ProjectsPage() {
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            
+
             {submitSuccess ? (
               <div className="py-8 text-center">
                 <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -876,7 +825,7 @@ export default function ProjectsPage() {
                 </div>
                 <h4 className="text-lg font-medium mb-2">Project Shared Successfully!</h4>
                 <p className="text-muted-foreground mb-6">Your project has been submitted and will be reviewed shortly.</p>
-                <Button 
+                <Button
                   onClick={() => {
                     setShowShareModal(false);
                     setSubmitSuccess(false);
@@ -931,23 +880,6 @@ export default function ProjectsPage() {
                         variant="outline"
                         className="w-full"
                         onClick={() => {
-                          const githubToken = typeof window !== 'undefined'
-                            ? localStorage.getItem('github_token')
-                            : null;
-                          const mainToken = typeof window !== 'undefined'
-                            ? localStorage.getItem('auth_token')
-                            : null;
-
-                          if (!mainToken) {
-                            setSubmitError("Please log in first.");
-                            return;
-                          }
-
-                          if (!githubToken) {
-                            setSubmitError("GitHub account not linked. Please link it in your profile settings first.");
-                            return;
-                          }
-
                           fetchUserRepos();
                         }}
                         disabled={loadingRepos}
@@ -966,7 +898,7 @@ export default function ProjectsPage() {
                       </Button>
                     </div>
                   </div>
-                  
+
                   <div>
                     <label htmlFor="projectUrl" className="block text-sm font-medium mb-1">
                       Live Demo URL
@@ -979,7 +911,7 @@ export default function ProjectsPage() {
                       placeholder="https://example.com"
                     />
                   </div>
-                  
+
                   <div>
                     <label htmlFor="projectName" className="block text-sm font-medium mb-1">
                       Project Name *
@@ -992,7 +924,7 @@ export default function ProjectsPage() {
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <label htmlFor="projectDescription" className="block text-sm font-medium mb-1">
                       Description *
@@ -1007,7 +939,7 @@ export default function ProjectsPage() {
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <label htmlFor="githubUrl" className="block text-sm font-medium mb-1">
                       GitHub Repository URL
@@ -1020,7 +952,7 @@ export default function ProjectsPage() {
                       placeholder="https://github.com/username/repo"
                     />
                   </div>
-                  
+
                   <div>
                     <label htmlFor="projectTags" className="block text-sm font-medium mb-1">
                       Tags
@@ -1035,14 +967,14 @@ export default function ProjectsPage() {
                       Separate multiple tags with commas
                     </p>
                   </div>
-                  
+
                   {submitError && (
                     <div className="text-red-500 text-sm p-2 bg-red-500/10 rounded-md">
                       {submitError}
                     </div>
                   )}
                 </div>
-                
+
                 <div className="flex space-x-3 mt-6">
                   <Button
                     type="button"
@@ -1076,7 +1008,7 @@ export default function ProjectsPage() {
           </div>
         </div>
       )}
-      
+
       {/* Repository Picker Modal */}
       {showRepoPicker && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -1092,7 +1024,7 @@ export default function ProjectsPage() {
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            
+
             <div className="p-4 max-h-80 overflow-y-auto">
               {loadingRepos ? (
                 <div className="py-8 text-center">
@@ -1104,8 +1036,8 @@ export default function ProjectsPage() {
               ) : userRepos.length > 0 ? (
                 <div className="space-y-2">
                   {userRepos.map((repo) => (
-                    <div 
-                      key={repo.id} 
+                    <div
+                      key={repo.id}
                       className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
                       onClick={() => selectRepo(repo)}
                     >
@@ -1119,8 +1051,8 @@ export default function ProjectsPage() {
                         <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                           {repo.language && (
                             <span className="flex items-center">
-                              <span 
-                                className="w-3 h-3 rounded-full mr-1" 
+                              <span
+                                className="w-3 h-3 rounded-full mr-1"
                                 style={{ backgroundColor: getLanguageColor(repo.language) }}
                               ></span>
                               {repo.language}
@@ -1144,9 +1076,9 @@ export default function ProjectsPage() {
                 </div>
               )}
             </div>
-            
+
             <div className="border-t p-4 flex justify-end">
-              <Button 
+              <Button
                 variant="outline"
                 onClick={() => setShowRepoPicker(false)}
               >

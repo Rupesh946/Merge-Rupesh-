@@ -1,59 +1,66 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useAuth } from "@/contexts/auth-context";
+import { useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
 
-export default function AuthCallbackPage() {
-  const router = useRouter();
+function AuthCallbackContent() {
   const searchParams = useSearchParams();
-  const { user } = useAuth();
   const token = searchParams.get("token");
+  const error = searchParams.get("error");
 
   useEffect(() => {
-    if (token) {
-      // Store the token in localStorage to sync with the auth context
-      localStorage.setItem("auth_token", token);
-      
-      // Manually dispatch a storage event to trigger auth context update in the same tab
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'auth_token',
-        oldValue: null,
-        newValue: token,
-        url: window.location.href,
-        storageArea: localStorage
-      }));
-      
-      // Remove the token from the URL to prevent it from being visible
-      window.history.replaceState({}, document.title, "/auth/callback");
-      
-      // Redirect to home page after a short delay to allow state to update
-      const timer = setTimeout(() => {
-        router.push("/home");
-      }, 10);
-
-      return () => clearTimeout(timer);
-    } else if (user) {
-      // If already authenticated, redirect to home
-      router.push("/home");
+    if (error) {
+      // OAuth failed — redirect to sign-in with error message
+      window.location.href = `/auth/signin?error=${error}`;
+      return;
     }
-  }, [token, user, router]);
+
+    if (token) {
+      // Store the JWT in localStorage
+      localStorage.setItem("auth_token", token);
+
+      // Use a hard redirect so the page fully reloads and the
+      // auth context re-initializes from scratch with the new token.
+      // This is the most reliable way to ensure the user is logged in.
+      window.location.href = "/home";
+    } else {
+      // No token and no error — just go to sign-in
+      window.location.href = "/auth/signin";
+    }
+  }, [token, error]);
 
   return (
+    <div className="w-full max-w-sm">
+      <Card className="border-primary/20 bg-card/30">
+        <CardHeader className="text-center pb-4">
+          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+            <Loader2 className="h-6 w-6 text-primary animate-spin" />
+          </div>
+          <CardTitle className="text-xl font-light">Signing you in...</CardTitle>
+        </CardHeader>
+        <CardContent className="text-center">
+          <p className="text-sm font-light text-muted-foreground">
+            Almost there, just a moment.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function AuthCallbackPage() {
+  return (
     <div className="min-h-screen bg-background flex items-center justify-center p-8">
-      <div className="w-full max-w-sm">
-        <Card className="border-primary/20 bg-card/30">
-          <CardHeader className="text-center pb-4">
-            <CardTitle className="text-xl font-light">Processing authentication...</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-center">
-            <p className="text-sm font-light text-muted-foreground">
-              Please wait while we complete your login.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <Suspense fallback={
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm font-light">Loading...</span>
+        </div>
+      }>
+        <AuthCallbackContent />
+      </Suspense>
     </div>
   );
 }

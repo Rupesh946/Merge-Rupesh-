@@ -26,12 +26,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
                 const token = localStorage.getItem('auth_token');
                 if (token) {
+                    api.setToken(token); // ← set token on API client FIRST
                     const response = await api.getCurrentUser();
                     setUser(response.user);
                 }
             } catch (error) {
                 console.error('Auth check failed:', error);
-                // Clear invalid token
+                localStorage.removeItem('auth_token');
                 api.clearToken();
             } finally {
                 setLoading(false);
@@ -39,32 +40,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
         checkAuth();
-        
-        // Listen for storage changes to handle token updates from other tabs/pages
+
+        // Listen for storage changes (cross-tab and same-tab dispatched events)
         const handleStorageChange = (e: StorageEvent) => {
             if (e.key === 'auth_token') {
                 if (e.newValue) {
-                    // Token was added/updated, fetch user info
+                    api.setToken(e.newValue); // ← set token BEFORE fetching user
                     api.getCurrentUser()
                         .then(response => setUser(response.user))
                         .catch(error => {
                             console.error('Failed to get user after token update:', error);
+                            localStorage.removeItem('auth_token');
                             api.clearToken();
                             setUser(null);
                         });
                 } else {
-                    // Token was removed (logout)
+                    api.clearToken();
                     setUser(null);
                 }
             }
         };
-        
+
         window.addEventListener('storage', handleStorageChange);
-        
-        // Cleanup listener on unmount
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-        };
+        return () => { window.removeEventListener('storage', handleStorageChange); };
     }, []);
 
     const login = async (email: string, password: string) => {
