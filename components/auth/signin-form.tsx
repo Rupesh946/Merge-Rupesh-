@@ -1,12 +1,19 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertCircle, Loader2, Github } from 'lucide-react';
+
+const ERROR_MESSAGES: Record<string, string> = {
+    server_error: 'GitHub sign-in failed due to a server error. Please try again.',
+    github_denied: 'GitHub authorisation was denied. Please try again.',
+    github_token_failed: 'Failed to obtain a GitHub access token. Please try again.',
+    no_email: 'Your GitHub account does not have a verified public email. Please add one and retry.',
+};
 
 export function SignInForm() {
     const [email, setEmail] = useState('');
@@ -16,6 +23,15 @@ export function SignInForm() {
     const [githubLoading, setGithubLoading] = useState(false);
     const { login, isAuthenticated, loading: authLoading } = useAuth();
     const router = useRouter();
+    const searchParams = useSearchParams();
+
+    // Show errors passed back via query string (e.g., from GitHub OAuth callback)
+    useEffect(() => {
+        const urlError = searchParams.get('error');
+        if (urlError) {
+            setError(ERROR_MESSAGES[urlError] ?? 'An unexpected error occurred. Please try again.');
+        }
+    }, [searchParams]);
 
     // Redirect if already authenticated
     useEffect(() => {

@@ -27,6 +27,7 @@ export async function GET(req: Request) {
         code,
         redirect_uri: `${baseUrl}/api/auth/github/callback`,
       }),
+      cache: 'no-store',
     });
 
     const tokenData = await tokenRes.json();
@@ -131,7 +132,15 @@ export async function GET(req: Request) {
       `${baseUrl}/auth/callback?token=${token}&user=${userEncoded}`
     );
   } catch (err) {
-    console.error('GitHub OAuth callback error:', err);
+    console.error('=== GitHub OAuth callback error ===');
+    console.error('Error type:', typeof err);
+    if (err instanceof Error) {
+      console.error('Message:', err.message);
+      console.error('Stack:', err.stack);
+    } else {
+      console.error('Raw error:', JSON.stringify(err, null, 2));
+    }
+    console.error('=== End GitHub OAuth error ===');
     return NextResponse.redirect(`${baseUrl}/auth/signin?error=server_error`);
   }
 }

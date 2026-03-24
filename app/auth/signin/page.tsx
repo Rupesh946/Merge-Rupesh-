@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Minus } from "lucide-react";
 import Link from "next/link";
 import { SignInForm } from "@/components/auth/signin-form";
+import { Suspense } from "react";
 
 export default function SignInPage() {
   return (
@@ -27,7 +28,9 @@ export default function SignInPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <SignInForm />
+            <Suspense fallback={<div className="h-10 w-full flex items-center justify-center text-sm text-muted-foreground">Loading form...</div>}>
+              <SignInForm />
+            </Suspense>
 
             <div className="text-center">
               <p className="text-sm font-light text-muted-foreground">
