@@ -9,47 +9,37 @@ export async function POST(req: Request) {
 
         if (!email || !password) {
             return NextResponse.json(
-                { message: 'Missing email or password' },
+                { message: 'Missing required fields' },
                 { status: 400 }
             );
         }
 
-        // Find user
         const user = await prisma.user.findUnique({
             where: { email }
         });
 
-        if (!user) {
+        if (!user || user.password === '') {
             return NextResponse.json(
                 { message: 'Invalid credentials' },
                 { status: 401 }
             );
         }
 
-        // Verify password — user.password is null for OAuth-only accounts
-        if (!user.password) {
-            return NextResponse.json(
-                { message: 'Invalid credentials' },
-                { status: 401 }
-            );
-        }
-        const isValid = await bcrypt.compare(password, user.password);
+        const isPasswordValid = await bcrypt.compare(password, user.password);
 
-        if (!isValid) {
+        if (!isPasswordValid) {
             return NextResponse.json(
                 { message: 'Invalid credentials' },
                 { status: 401 }
             );
         }
 
-        // Create JWT
         const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'default_secret');
         const token = await new SignJWT({ id: user.id, email: user.email })
             .setProtectedHeader({ alg: 'HS256' })
             .setExpirationTime('7d')
             .sign(secret);
 
-        // Return user without password
         const { password: _, ...userWithoutPassword } = user;
 
         return NextResponse.json({

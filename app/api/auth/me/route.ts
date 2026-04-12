@@ -4,7 +4,8 @@ import { jwtVerify } from 'jose';
 
 export async function GET(req: Request) {
     try {
-        const authHeader = req.headers.get('Authorization');
+        const authHeader = req.headers.get('authorization');
+        
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return NextResponse.json(
                 { message: 'Unauthorized' },
@@ -13,19 +14,19 @@ export async function GET(req: Request) {
         }
 
         const token = authHeader.split(' ')[1];
+        
         const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'default_secret');
-
         const { payload } = await jwtVerify(token, secret);
 
-        if (!payload.email) {
-            return NextResponse.json(
+        if (!payload || !payload.id) {
+             return NextResponse.json(
                 { message: 'Invalid token' },
                 { status: 401 }
             );
         }
 
         const user = await prisma.user.findUnique({
-            where: { email: payload.email as string }
+            where: { id: payload.id as string }
         });
 
         if (!user) {
@@ -35,16 +36,16 @@ export async function GET(req: Request) {
             );
         }
 
-        const { password: _, githubAccessToken: _gh, ...userWithoutPassword } = user;
+        const { password: _, ...userWithoutPassword } = user;
 
         return NextResponse.json({
             user: userWithoutPassword
         });
 
     } catch (error) {
-        console.error('Session verify error:', error);
+        console.error('Auth check error:', error);
         return NextResponse.json(
-            { message: 'Invalid or expired token' },
+            { message: 'Internal server error or invalid token' },
             { status: 401 }
         );
     }
